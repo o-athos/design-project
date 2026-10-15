@@ -1,0 +1,1 @@
+De acordo com item 5 do enunciado
