@@ -8,10 +8,11 @@
 |---|---|---|
 | `Recurso` | Tipo e capacidade; sabe se comporta uma quantidade | Information Expert |
 | `Periodo` (value object) | Validar início < fim; detectar sobreposição | Alta coesão, imutável |
-| `AgendaRecurso` | Calcular a capacidade livre num período a partir das reservas existentes | Information Expert |
-| `Reserva` | Ciclo de vida PENDENTE → APROVADA → ATIVA → ENCERRADA (ou REJEITADA/CANCELADA); impede transições inválidas | Expert, encapsulamento |
-| `Projeto` | Agrupa usuários e possui a quota | Creator de `Reserva` |
-| `Quota` | Consumo atual; decide se um pedido cabe | Information Expert |
+| `AgendaRecurso` | Calcular a capacidade livre num período a partir das reservas existentes; criar a reserva quando há capacidade | Information Expert, Creator de `Reserva` |
+| `Reserva` | Ciclo de vida PENDENTE → APROVADA → ATIVA → ENCERRADA (ou REJEITADA/CANCELADA); impede transições inválidas; registra quem aprovou ou rejeitou e quando | Expert, encapsulamento |
+| `Usuario` | Identidade institucional e papel (aluno, doutorando, orientador, administrador) | Information Expert |
+| `Projeto` | Agrupa usuários e possui a quota | Information Expert |
+| `Quota` | Limite definido pelo administrador e consumo atual; decide se um pedido cabe | Information Expert |
 | `PoliticaAutorizacao` (interface) | Decide auto-aprovar, exigir aprovação ou negar | Polymorphism, Protected Variations, OCP |
 | `SolicitarReservaUseCase` | Orquestrar o fluxo, sem regra de negócio | Controller, SRP |
 | `RepositorioReservas`, `Notificador`, `Provisionador`, `ServicoAutenticacao` | Portas para a infraestrutura | Pure Fabrication, Indirection, DIP |
@@ -22,10 +23,11 @@
 
 - **`Recurso` (Information Expert):** Guarda o tipo (GPU, servidor, storage) e a capacidade total. Por deter a informação de hardware, valida se suporta a quantidade solicitada.
 - **`Periodo` (Alta coesão, imutável):** Value object com início e fim. Garante que `início < fim` e calcula se há sobreposição temporal com outros períodos.
-- **`AgendaRecurso` (Information Expert):** Conhece as reservas do recurso e calcula o saldo livre em um período, evitando sobreposição e excesso de alocação (ASR1).
-- **`Reserva` (Information Expert / Encapsulamento):** Controla os dados da solicitação e as transições de estado (`aprovar()`, `ativar()`, `encerrar()`, `cancelar()`, `rejeitar()`), impedindo transições inválidas.
-- **`Projeto` (Creator):** Agrupa os pesquisadores e detém a quota. É responsável por instanciar a `Reserva` vinculada ao projeto.
-- **`Quota` (Information Expert):** Mantém o consumo acumulado do projeto e calcula se uma nova solicitação excede o limite mensal.
+- **`AgendaRecurso` (Information Expert / Creator):** Conhece as reservas do recurso e calcula o saldo livre em um período, evitando sobreposição e excesso de alocação (ASR1). Reservas pendentes e aprovadas contam como ocupadas. Por registrar as reservas do recurso e ter os dados para validá-las, é ela quem cria a `Reserva`. Se não há capacidade, nenhuma reserva é criada e o pedido é recusado por indisponibilidade.
+- **`Reserva` (Information Expert / Encapsulamento):** Controla os dados da solicitação e as transições de estado (`aprovar()`, `ativar()`, `encerrar()`, `cancelar()`, `rejeitar()`), impedindo transições inválidas. `aprovar()` e `rejeitar()` registram o responsável e a data da decisão. REJEITADA é sempre decisão de um aprovador; a falta de capacidade não gera reserva rejeitada.
+- **`Usuario` (Information Expert):** Representa quem está usando o sistema, com o papel obtido da autenticação institucional. As políticas usam esse papel, por exemplo para restringir um recurso a doutorandos.
+- **`Projeto` (Information Expert):** Agrupa os pesquisadores e detém a quota.
+- **`Quota` (Information Expert):** Guarda o limite definido pelo administrador e o consumo do projeto, que inclui as reservas pendentes e aprovadas, e calcula se uma nova solicitação excede o limite mensal. Mudar o limite é mudar um dado, não o código.
 - **`PoliticaAutorizacao` (Polymorphism / Protected Variations):** Interface para definir regras de autorização (ex.: aprovação direta vs. exigência de orientador para mais de 2 GPUs ou mais de 72h). Isola o caso de uso de mudanças de regras (ASR2).
 - **`SolicitarReservaUseCase` (Controller):** Coordena o fluxo da solicitação (consulta agenda, quota, aplica política e persiste), sem assumir regras de negócio das entidades.
 - **Portas de infraestrutura (Pure Fabrication / Indirection):** `RepositorioReservas`, `Notificador`, `Provisionador` e `ServicoAutenticacao` isolam o domínio de banco de dados, e-mail, Slurm e LDAP (ASR3).
