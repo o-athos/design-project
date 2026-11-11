@@ -1,3 +1,5 @@
+*De acordo com item 4 e 8 do enunciado*
+
 # Proposta arquitetural
 
 O sistema é um monolito modular acessado no modelo cliente-servidor, e cada módulo é organizado por dentro com arquitetura hexagonal (portas e adaptadores)
@@ -82,3 +84,67 @@ As portas de saída do núcleo ficam em `reservas/aplicacao`. `RepositorioReserv
 `PoliticaAutorizacao` é o ponto de extensão do módulo de quotas. Cada política devolve `AUTO_APROVAR`, `EXIGIR_APROVACAO` ou `NEGAR`, e quando várias se aplicam ao mesmo pedido vale a mais restritiva. A primeira implementação é `PoliticaLimiteGpuDuracao`, que exige aprovação para mais de 2 GPUs ou mais de 72h. Para criar a regra "GPU XYZ apenas para doutorandos", basta escrever `PoliticaGpuApenasDoutorandos` e registrá-la em `app/`. O `SolicitarReservaUseCase` recebe a lista de políticas por injeção e continua igual.
 
 As portas falam a língua do domínio. O `Provisionador` recebe pedidos como "liberar o acesso da reserva X" e "revogar o acesso da reserva X", sem nenhum comando ou conceito do Slurm. Se a porta expusesse detalhes de um provisionador específico, trocar de provisionador deixaria de ser só a troca de um adaptador (ADR-002).
+
+## Mecanismos e decisões de comunicação
+
+Entre cliente e servidor a comunicação é HTTP/REST síncrona, com JSON. O cliente envia um pedido e recebe na mesma resposta se a reserva foi aprovada, ficou pendente ou foi recusada. Não há motivo para algo mais elaborado: os clientes são simples e a carga esperada é baixa.
+
+Entre os módulos, as chamadas são síncronas e acontecem dentro do mesmo processo, por meio das interfaces públicas (`CatalogoRecursos`, `ControleQuotas`). Isso permite que a verificação de disponibilidade, a verificação de quota e a gravação da reserva fiquem na mesma transação, como o ASR1 exige. Se os módulos conversassem pela rede, essa transação viraria uma transação distribuída (ADR-001).
+
+As notificações são assíncronas. O caso de uso publica um evento de domínio (`ReservaAprovada`, `ReservaRejeitada`, `ReservaAtivada`, `ReservaEncerrada`) pela porta `PublicadorEventos`, e o barramento só entrega o evento depois que a transação foi confirmada. O tratador do módulo de notificações processa o evento separadamente e chama o `Notificador`. Uma falha no envio de e-mail fica registrada em log e não desfaz nem bloqueia a reserva (ASR3). O preço é a consistência eventual: o aviso pode chegar alguns instantes depois da mudança de estado e, como o barramento é em memória, um evento pode se perder se o servidor cair nesse intervalo. Para o contexto do Dinf isso é aceitável. O ADR-002 registra a consistência eventual como custo da decisão, junto com a necessidade de tratar falhas e reenvios.
+
+O agendador é o único mecanismo disparado pelo relógio. Ele roda periodicamente dentro do servidor, busca as reservas aprovadas cujo período começou e as reservas ativas cujo período terminou, e chama `AtivarReservasUseCase` e `EncerrarReservasUseCase`. A chamada ao `Provisionador` acontece fora de qualquer transação de reserva, para que um sistema externo lento não segure o lock do recurso (ADR-003). Se o provisionamento falhar, a reserva continua no estado anterior e o agendador tenta de novo na execução seguinte.
+
+## Persistência
+
+O sistema usa um único banco PostgreSQL, compartilhado pelos módulos (ADR-001). Cada módulo tem as próprias tabelas e só acessa as suas, sempre pelo próprio repositório. Reservas usa `RepositorioReservas`, e catálogo e quotas têm repositórios equivalentes. Assim o banco é um só, mas a fronteira entre os módulos continua valendo também nos dados.
+
+A garantia do ASR1 fica na transação aberta pelo `SolicitarReservaUseCase`, que cobre verificar a disponibilidade, verificar e consumir a quota e gravar a reserva (ADR-003). Para recursos contáveis, como GPUs e storage, a transação bloqueia a linha do recurso (`SELECT ... FOR UPDATE`) antes de calcular a capacidade livre, então dois pedidos para o mesmo recurso são avaliados um de cada vez. Para servidores de uso exclusivo, o banco também impede períodos sobrepostos com uma exclusion constraint (`tstzrange` com `EXCLUDE USING gist`). Assim a regra vale mesmo que a aplicação tenha um erro. Pedidos para recursos diferentes não disputam o mesmo lock.
+
+O protótipo usa SQLite com transação e lock de escrita no lugar do PostgreSQL. O teste de concorrência do ASR1 funciona igual, mas a exclusion constraint não é exercitada no protótipo. Os testes de domínio e de caso de uso não usam banco: recebem o repositório em memória.
+
+## Integrações externas
+
+O sistema conversa com três sistemas externos, e cada um fica atrás de uma porta:
+
+- Autenticação institucional (LDAP/SSO), atrás de `ServicoAutenticacao`. No protótipo, `ServicoAutenticacaoFake` devolve um usuário fixo.
+- Provisionador de recursos (Slurm, OpenStack ou Proxmox; ainda não definido), atrás de `Provisionador`. No protótipo, `SlurmProvisionador` é um stub que só registra o comando que seria executado, e os testes usam `ProvisionadorFake`.
+- Serviço de e-mail, atrás de `Notificador`. `EmailNotificador` envia por SMTP, e para rodar localmente pode apontar para o Mailpit, que captura as mensagens sem enviá-las de verdade. Os testes usam `NotificadorFake`.
+
+Nenhuma dessas integrações é chamada diretamente por um caso de uso ou por uma entidade. O domínio não sabe que elas existem.
+
+## Dependência externa
+
+As duas integrações substituíveis que o protótipo demonstra são estas:
+
+```
+Notificador (porta do módulo notificacoes)
+|-- EmailNotificador     SMTP real ou Mailpit local
+`-- NotificadorFake      guarda as mensagens em memória, usado nos testes
+
+Provisionador (porta definida pelo núcleo, em reservas/aplicacao)
+|-- SlurmProvisionador   stub que registra o comando que seria executado
+`-- ProvisionadorFake    registra as chamadas em memória, usado nos testes
+```
+
+Em termos de interface, cada porta é pequena e fala a língua do domínio: o `Notificador` sabe enviar um aviso a um destinatário, e o `Provisionador` sabe liberar e revogar o acesso de uma reserva. Nenhuma delas expõe SMTP ou comandos do Slurm.
+
+Quanto às dependências, os casos de uso e o tratador de eventos dependem só das portas. As implementações concretas dependem das portas, e não o contrário, e só o `app/` sabe qual implementação está em uso.
+
+Na testabilidade, os testes trocam as implementações reais pelos fakes. Assim, eles rodam sem rede e conseguem verificar se o aviso foi enviado ou se o acesso foi liberado olhando o que o fake registrou.
+
+Na modificabilidade, trocar e-mail por Telegram ou Slurm por OpenStack é escrever um adaptador novo que implementa a mesma porta e mudar uma linha no `app/`. Domínio, casos de uso, banco e API ficam iguais. O `evolucao.md` analisa essas trocas.
+
+## Documentação da API
+
+A API cobre o caso de uso principal e as consultas do protótipo:
+
+| Método e rota | O que faz | Respostas |
+|---|---|---|
+| `POST /reservas` | Solicita uma reserva (recurso, quantidade, início, fim, projeto) | 201 com a reserva APROVADA ou PENDENTE; 400 período inválido; 403 pedido negado por política; 409 recurso indisponível; 422 quota excedida |
+| `GET /reservas` | Lista as reservas do usuário autenticado | 200 |
+| `GET /recursos/{id}/agenda?inicio=&fim=` | Mostra a ocupação e a capacidade livre de um recurso no período | 200; 404 recurso inexistente |
+| `POST /reservas/{id}/aprovacao` | O responsável aprova ou rejeita uma reserva pendente | 200; 403 usuário não é responsável pelo projeto; 409 reserva não está pendente |
+| `DELETE /reservas/{id}` | Cancela uma reserva, devolvendo capacidade e quota | 204; 409 reserva já encerrada |
+
+A diferença entre 409 e 422 é intencional: 409 significa que o recurso não tem capacidade no período, e outro horário pode funcionar; 422 significa que o projeto não tem quota, e trocar o horário não resolve. A especificação completa, com os formatos de requisição e resposta, será publicada em OpenAPI junto com o código.
