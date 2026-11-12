@@ -99,7 +99,7 @@ O agendador é o único mecanismo disparado pelo relógio. Ele roda periodicamen
 
 O sistema usa um único banco PostgreSQL, compartilhado pelos módulos (ADR-001). Cada módulo tem as próprias tabelas e só acessa as suas, sempre pelo próprio repositório. Reservas usa `RepositorioReservas`, e catálogo e quotas têm repositórios equivalentes. Assim o banco é um só, mas a fronteira entre os módulos continua valendo também nos dados.
 
-A garantia do ASR1 fica na transação aberta pelo `SolicitarReservaUseCase`, que cobre verificar a disponibilidade, verificar e consumir a quota e gravar a reserva (ADR-003). Para recursos contáveis, como GPUs e storage, a transação bloqueia a linha do recurso (`SELECT ... FOR UPDATE`) antes de calcular a capacidade livre, então dois pedidos para o mesmo recurso são avaliados um de cada vez. Para servidores de uso exclusivo, o banco também impede períodos sobrepostos com uma exclusion constraint (`tstzrange` com `EXCLUDE USING gist`). Assim a regra vale mesmo que a aplicação tenha um erro. Pedidos para recursos diferentes não disputam o mesmo lock.
+A garantia do ASR1 fica na transação aberta pelo `SolicitarReservaUseCase`, que cobre verificar a disponibilidade, verificar e consumir a quota e gravar a reserva (ADR-003). Para recursos contáveis, como GPUs e storage, a transação bloqueia a linha do recurso (`SELECT ... FOR UPDATE`) antes de calcular a capacidade livre, então dois pedidos para o mesmo recurso são avaliados um de cada vez. Em seguida bloqueia a linha da quota do projeto, para que dois pedidos do mesmo projeto em recursos diferentes também não passem juntos pela verificação de quota. A ordem é sempre recurso e depois quota, o que evita deadlock. Para servidores de uso exclusivo, o banco também impede períodos sobrepostos com uma exclusion constraint (`tstzrange` com `EXCLUDE USING gist`). Assim a regra vale mesmo que a aplicação tenha um erro. Pedidos para recursos diferentes, de projetos diferentes, não disputam o mesmo lock.
 
 O protótipo usa SQLite com transação e lock de escrita no lugar do PostgreSQL. O teste de concorrência do ASR1 funciona igual, mas a exclusion constraint não é exercitada no protótipo. Os testes de domínio e de caso de uso não usam banco: recebem o repositório em memória.
 
@@ -115,7 +115,7 @@ Nenhuma dessas integrações é chamada diretamente por um caso de uso ou por um
 
 ## Dependência externa
 
-As duas integrações substituíveis que o protótipo demonstra são estas:
+As duas integrações substituíveis implementadas no protótipo são estas:
 
 ```
 Notificador (porta do módulo notificacoes)
