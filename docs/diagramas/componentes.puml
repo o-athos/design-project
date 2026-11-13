@@ -1,0 +1,115 @@
+@startuml componentes
+title Diagrama de Componentes - Controle de uso de infraestrutura computacional
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam defaultTextAlignment center
+
+' ===================== Módulos de suporte =====================
+package "catalogo" {
+  [CatalogoRecursos (impl)] as catImpl
+}
+interface "CatalogoRecursos" as ICatalogo
+
+package "quotas" {
+  [ControleQuotas (impl)] as quoImpl
+  [PoliticaAutorizacao\n+ políticas] as pol
+  quoImpl ..> pol
+}
+interface "ControleQuotas" as IQuotas
+
+package "identidade" {
+  [ServicoAutenticacao\n(fake / LDAP)] as autImpl
+  [DiretorioUsuarios (impl)] as dirImpl
+}
+interface "ServicoAutenticacao" as IAuth
+interface "DiretorioUsuarios" as IDir
+
+' ===================== Núcleo: reservas =====================
+package "reservas (núcleo)" {
+  package "dominio" {
+    [Reserva, Periodo, AgendaRecurso,\neventos de domínio] as dom
+  }
+  package "aplicacao" {
+    [SolicitarReservaUseCase\n(+ demais casos de uso)] as uc
+    interface "RepositorioReservas" as IRepo
+    interface "Provisionador" as IProv
+    interface "PublicadorEventos" as IPub
+    interface "UnidadeDeTrabalho" as IUoW
+  }
+  package "adaptadores" {
+    [Controlador REST] as rest
+    [Agendador] as sched
+    [RepositorioReservas SQL] as repoSql
+    [Barramento de eventos\n(em memória)] as bus
+    [UnidadeDeTrabalho SQL] as uowSql
+  }
+}
+
+' ===================== Integrações externas =====================
+package "notificacoes" {
+  [Tratador de eventos] as evt
+  interface "Notificador" as INotif
+  [EmailNotificador] as email
+  [NotificadorFake] as nfake
+}
+
+package "provisionamento" {
+  [SlurmProvisionador (stub)] as slurm
+  [ProvisionadorFake] as pfake
+}
+
+' ===================== Composição =====================
+[app (composição)] as app
+
+' ---- Interfaces providas pelos módulos de suporte ----
+catImpl -up- ICatalogo
+quoImpl -up- IQuotas
+autImpl -up- IAuth
+dirImpl -up- IDir
+
+' ---- reservas consome catálogo, quotas e identidade ----
+uc ..> ICatalogo
+uc ..> IQuotas
+rest ..> IAuth
+uc ..> dom
+
+' ---- Portas definidas pelo núcleo e seus adaptadores internos ----
+uc ..> IRepo
+uc ..> IUoW
+uc ..> IPub
+uc ..> IProv
+repoSql ..|> IRepo
+uowSql ..|> IUoW
+bus ..|> IPub
+
+' ---- Entradas do núcleo ----
+rest ..> uc
+sched ..> uc
+
+' ---- Provisionador: porta do núcleo, implementada por provisionamento (DIP) ----
+slurm ..|> IProv
+pfake ..|> IProv
+
+' ---- Notificações: assina os eventos e usa DiretorioUsuarios ----
+evt ..> INotif
+email ..|> INotif
+nfake ..|> INotif
+evt ..> IDir
+notificacoes ..> bus : assina eventos\n(ReservaPendente, ...)
+
+' ---- Composição liga os adaptadores às portas ----
+app ..> reservas
+app ..> catalogo
+app ..> quotas
+app ..> notificacoes
+app ..> provisionamento
+app ..> identidade
+
+note bottom of IProv
+  Provisionador e PublicadorEventos são
+  portas do núcleo: provisionamento e
+  notificacoes dependem de reservas (DIP).
+end note
+
+@enduml
