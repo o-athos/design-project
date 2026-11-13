@@ -61,6 +61,7 @@ Esta tabela é a fonte dos nomes usados nos diagramas e no código.
 | `RepositorioReservas` | `salvar(reserva)`, `buscarPorId(id)`, `listarPorUsuario(usuario)`, `listarPorRecurso(recurso, periodo)`, `listarParaAtivar(agora)`, `listarParaEncerrar(agora)` |
 | `Provisionador` | `liberarAcesso(reserva)`, `revogarAcesso(reserva)` |
 | `Notificador` | `notificar(destinatario, mensagem)` |
+| `TratadorDeEventos` | `tratar(evento)` |
 | `PublicadorEventos` | `publicar(evento)` |
 | `ServicoAutenticacao` | `autenticar(credencial)` |
 | `DiretorioUsuarios` | `buscar(id)` |

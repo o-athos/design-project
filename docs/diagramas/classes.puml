@@ -1,0 +1,192 @@
+@startuml classes
+title Diagrama de Classes - Controle de uso de infraestrutura computacional
+
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+hide empty members
+
+' ======================= Domínio: entidades e VOs =======================
+package "reservas.dominio" {
+
+  enum EstadoReserva {
+    PENDENTE
+    APROVADA
+    ATIVA
+    ENCERRADA
+    REJEITADA
+    CANCELADA
+  }
+
+  class Periodo <<value object>> {
+    +inicio : Instant
+    +fim : Instant
+    +sobrepoe(outro : Periodo) : boolean
+    +duracao() : Duration
+  }
+
+  class Reserva {
+    +id
+    +estado : EstadoReserva
+    +quantidade : int
+    +acessoLiberado : boolean
+    +aprovar(aprovador : Usuario)
+    +rejeitar(aprovador : Usuario)
+    +ativar()
+    +encerrar()
+    +cancelar()
+  }
+
+  class AgendaRecurso {
+    +verificarDisponibilidade(periodo : Periodo, quantidade : int)
+    +criarReserva(...) : Reserva
+  }
+
+  Reserva *-- Periodo
+  Reserva --> EstadoReserva
+  AgendaRecurso ..> Reserva : cria
+  AgendaRecurso --> Recurso
+}
+
+' ======================= Catálogo =======================
+package "catalogo" {
+  class Recurso {
+    +id
+    +tipo : TipoRecurso
+    +capacidade : int
+    +comporta(quantidade : int) : boolean
+  }
+  enum TipoRecurso {
+    GPU
+    SERVIDOR
+    STORAGE
+  }
+  interface CatalogoRecursos {
+    +buscar(id) : Recurso
+    +obterParaAtualizacao(id) : Recurso
+  }
+  Recurso --> TipoRecurso
+  CatalogoRecursos ..> Recurso
+}
+
+' ======================= Quotas e políticas =======================
+package "quotas" {
+  class Projeto {
+    +id
+    +responsavel : Usuario
+  }
+  class Quota {
+    +limite
+    +consumo
+    +comporta(pedido) : boolean
+    +consumir(pedido)
+    +devolver(pedido)
+  }
+  interface ControleQuotas {
+    +verificarQuota(pedido)
+    +avaliarPoliticas(pedido) : Decisao
+    +consumir(pedido)
+    +devolver(pedido)
+    +responsavelDe(projeto) : Usuario
+    +obterParaAtualizacao(projeto, pedido) : Quota
+  }
+  interface PoliticaAutorizacao {
+    +avaliar(pedido) : Decisao
+  }
+  enum Decisao {
+    AUTO_APROVAR
+    EXIGIR_APROVACAO
+    NEGAR
+  }
+  class PoliticaLimiteGpuDuracao
+  class PoliticaGpuApenasDoutorandos
+
+  Projeto *-- Quota
+  PoliticaAutorizacao ..> Decisao
+  PoliticaLimiteGpuDuracao ..|> PoliticaAutorizacao
+  PoliticaGpuApenasDoutorandos ..|> PoliticaAutorizacao
+  ControleQuotas ..> Quota
+  ControleQuotas ..> PoliticaAutorizacao
+}
+
+' ======================= Identidade =======================
+package "identidade" {
+  class Usuario {
+    +id
+    +papel : Papel
+    +contato
+  }
+  enum Papel {
+    ALUNO
+    DOUTORANDO
+    ORIENTADOR
+    ADMINISTRADOR
+  }
+  interface ServicoAutenticacao {
+    +autenticar(credencial) : Usuario
+  }
+  interface DiretorioUsuarios {
+    +buscar(id) : Usuario
+  }
+  Usuario --> Papel
+}
+
+' ======================= Aplicação: caso de uso e portas =======================
+package "reservas.aplicacao" {
+  class SolicitarReservaUseCase {
+    +executar(comando)
+  }
+  interface RepositorioReservas {
+    +salvar(reserva)
+    +buscarPorId(id) : Reserva
+    +listarPorUsuario(usuario)
+    +listarPorRecurso(recurso, periodo)
+    +listarParaAtivar(agora)
+    +listarParaEncerrar(agora)
+  }
+  interface Provisionador {
+    +liberarAcesso(reserva)
+    +revogarAcesso(reserva)
+  }
+  interface PublicadorEventos {
+    +publicar(evento)
+  }
+  interface UnidadeDeTrabalho {
+    +executar(operacao)
+  }
+
+  SolicitarReservaUseCase ..> UnidadeDeTrabalho
+  SolicitarReservaUseCase ..> CatalogoRecursos
+  SolicitarReservaUseCase ..> ControleQuotas
+  SolicitarReservaUseCase ..> AgendaRecurso
+  SolicitarReservaUseCase ..> RepositorioReservas
+  SolicitarReservaUseCase ..> PublicadorEventos
+}
+
+' ======================= Notificações =======================
+package "notificacoes" {
+  interface Notificador {
+    +notificar(destinatario : Usuario, mensagem)
+  }
+  class EmailNotificador
+  class NotificadorFake
+  class TratadorDeEventos {
+    +tratar(evento)
+  }
+  EmailNotificador ..|> Notificador
+  NotificadorFake ..|> Notificador
+  TratadorDeEventos ..> Notificador
+  TratadorDeEventos ..> DiretorioUsuarios
+}
+
+' ======================= Provisionamento =======================
+package "provisionamento" {
+  class SlurmProvisionador
+  class ProvisionadorFake
+  SlurmProvisionador ..|> Provisionador
+  ProvisionadorFake ..|> Provisionador
+}
+
+Projeto --> Usuario : responsavel
+Reserva --> Projeto
+
+@enduml
