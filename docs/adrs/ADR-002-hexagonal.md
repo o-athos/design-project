@@ -38,13 +38,13 @@ Pergunta: como organizar cada módulo para que o domínio não conheça as tecno
 
 ## 4. Decisão
 
-Adotar a **Arquitetura Hexagonal** dentro dos módulos do monolito (ADR-001). As portas são `RepositorioReservas`, `Provisionador` e `PublicadorEventos`, definidas pelo núcleo de reservas, `Notificador`, do módulo de notificações, e `ServicoAutenticacao`, do módulo de identidade. Cada uma é pequena e específica (ISP). As portas que levam a sistemas externos têm uma implementação real ou stub e uma implementação fake:
+Adotar a **Arquitetura Hexagonal** dentro dos módulos do monolito (ADR-001). As portas são `RepositorioReservas`, `Provisionador`, `PublicadorEventos` e `UnidadeDeTrabalho`, definidas pelo núcleo de reservas, `Notificador`, do módulo de notificações, e `ServicoAutenticacao`, do módulo de identidade. Cada uma é pequena e específica (ISP). As portas que levam a sistemas externos têm uma implementação real ou stub e uma implementação fake:
 
 - `Notificador`: `EmailNotificador` e `NotificadorFake`.
 - `Provisionador`: `SlurmProvisionador` (stub) e `ProvisionadorFake`.
 - `ServicoAutenticacao`: `ServicoAutenticacaoFake` (usuário fixo no protótipo).
 
-O caso de uso recebe as portas por injeção de dependência, e só o módulo de composição (`app/`) conhece as implementações concretas. A notificação é disparada por eventos de domínio (`ReservaAprovada`, `ReservaRejeitada`, `ReservaAtivada`, `ReservaEncerrada`), publicados depois do commit e tratados de forma assíncrona.
+O caso de uso recebe as portas por injeção de dependência, e só o módulo de composição (`app/`) conhece as implementações concretas. A notificação é disparada por eventos de domínio (`ReservaPendente`, `ReservaAprovada`, `ReservaRejeitada`, `ReservaCancelada`, `ReservaAtivada`, `ReservaEncerrada`), publicados depois do commit e tratados de forma assíncrona. Os eventos carregam identificadores, e o `Notificador` recebe o `Usuario` destinatário e a mensagem, e não um endereço de e-mail, para que a porta não fique presa ao canal de e-mail.
 
 ---
 

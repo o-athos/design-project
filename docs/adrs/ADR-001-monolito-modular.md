@@ -27,7 +27,7 @@ Pergunta: o sistema deve ser dividido em serviços implantáveis separadamente o
 - Prós: mais simples de construir e implantar.
 - Contras: as regras de negócio tendem a vazar para as classes de serviço, o que dificulta a modificabilidade (ASR2).
 
-**B. Microsserviços.** Um serviço por módulo (catálogo, reservas, quotas, notificações), cada um com seu banco.
+**B. Microsserviços.** Um serviço por módulo (catálogo, reservas, quotas, notificações, provisionamento e identidade), cada um com seu banco.
 - Prós: isolamento de falhas e escalabilidade independente.
 - Contras: verificar e reservar passaria a atravessar serviços, já que a capacidade fica em reservas e a quota em quotas, exigindo saga ou transação distribuída (contra o ASR1). Também traz custo alto de implantação, operação e testes de integração para uma equipe pequena.
 
