@@ -1,0 +1,86 @@
+@startuml sequencia
+title Diagrama de Sequência - Solicitar reserva (POST /reservas)
+
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+
+actor Cliente
+participant "Controlador REST" as rest
+participant "SolicitarReservaUseCase" as uc
+participant "ServicoAutenticacao" as auth
+participant "UnidadeDeTrabalho" as uow
+participant "CatalogoRecursos" as cat
+participant "AgendaRecurso" as agenda
+participant "ControleQuotas" as quotas
+participant "PoliticaAutorizacao" as pol
+participant "RepositorioReservas" as repo
+participant "PublicadorEventos" as pub
+participant "TratadorDeEventos" as evt
+participant "DiretorioUsuarios" as dir
+participant "Notificador" as notif
+
+Cliente -> rest : POST /reservas(recurso, quantidade, periodo, projeto)
+rest -> auth : autenticar(credencial)
+auth --> rest : Usuario
+rest -> uc : executar(comando)
+
+uc -> uow : executar(operacao)
+activate uow
+
+group dentro da UnidadeDeTrabalho (transação)
+
+  uc -> cat : obterParaAtualizacao(recurso)
+  note right of cat : lock do recurso
+  cat --> uc : Recurso
+
+  uc -> agenda : verificarDisponibilidade(periodo, quantidade)
+
+  alt sem capacidade no período
+    agenda --> uc : Indisponivel
+    uc --> rest : erro 409
+    note over uow : rollback
+  else há capacidade
+    uc -> quotas : obterParaAtualizacao(projeto, pedido)
+    note right of quotas : lock da quota
+    quotas --> uc : Quota
+    uc -> quotas : verificarQuota(pedido)
+
+    alt quota excedida
+      quotas --> uc : QuotaExcedida
+      uc --> rest : erro 422
+      note over uow : rollback
+    else cabe na quota
+      uc -> quotas : avaliarPoliticas(pedido)
+      quotas -> pol : avaliar(pedido)
+      pol --> quotas : Decisao
+      quotas --> uc : Decisao
+
+      alt Decisao = NEGAR
+        uc --> rest : erro 403
+        note over uow : rollback
+      else AUTO_APROVAR (APROVADA) ou EXIGIR_APROVACAO (PENDENTE)
+        uc -> agenda : criarReserva(...)
+        agenda --> uc : Reserva
+        uc -> quotas : consumir(pedido)
+        uc -> repo : salvar(reserva)
+        uc -> pub : publicar(ReservaAprovada / ReservaPendente)
+        uc --> rest : 201 (APROVADA ou PENDENTE)
+      end
+    end
+  end
+
+end
+uow --> uc : commit
+deactivate uow
+
+rest --> Cliente : resposta HTTP (201 / 409 / 422 / 403)
+
+== após o commit (assíncrono) ==
+
+pub -> evt : ReservaAprovada / ReservaPendente
+evt -> dir : buscar(destinatario)
+dir --> evt : Usuario
+evt -> notif : notificar(Usuario, mensagem)
+note right of notif : falha aqui não desfaz a reserva (ASR3)
+
+@enduml
