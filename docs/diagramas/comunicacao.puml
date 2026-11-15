@@ -23,19 +23,19 @@ rest --> auth : 2: autenticar(credencial)
 rest --> uc : 3: executar(comando)
 uc --> uow : 4: executar(operacao)
 uc --> cat : 4.1: obterParaAtualizacao(recurso)
-uc --> agenda : 4.2: verificarDisponibilidade(periodo, quantidade)\n4.6: criarReserva(...)
-uc --> quotas : 4.3: obterParaAtualizacao(projeto, pedido)\n4.4: verificarQuota(pedido)\n4.5: avaliarPoliticas(pedido)\n4.7: consumir(pedido)
-quotas --> pol : 4.5.1: avaliar(pedido)
-uc --> repo : 4.8: salvar(reserva)
-uc --> pub : 4.9: publicar(ReservaAprovada / ReservaPendente)
+uc --> repo : 4.2: listarPorRecurso(recurso, periodo)\n4.9: salvar(reserva)
+uc --> agenda : 4.3: verificarDisponibilidade(periodo, quantidade)\n4.7: criarReserva(...)
+uc --> quotas : 4.4: obterParaAtualizacao(projeto, pedido)\n4.5: verificarQuota(pedido)\n4.6: avaliarPoliticas(pedido)\n4.8: consumir(pedido)\n4.10 [PENDENTE]: responsavelDe(projeto)
+quotas --> pol : 4.6.1: avaliar(pedido)
+uc --> pub : 4.11: publicar(ReservaAprovada / ReservaPendente)
 pub --> evt : 5: (após o commit) ReservaAprovada / ReservaPendente
 evt --> dir : 5.1: buscar(destinatario)
 evt --> notif : 5.2: notificar(Usuario, mensagem)
 
 note as N1
   Caminho feliz (AUTO_APROVAR). Alternativas (mesmas da sequência):
-  4.2 sem capacidade -> 409 e rollback; 4.4 quota excedida -> 422 e rollback;
-  4.5.1 NEGAR -> 403 e rollback; EXIGIR_APROVACAO -> reserva PENDENTE.
+  4.3 sem capacidade -> 409 e rollback; 4.5 quota excedida -> 422 e rollback;
+  4.6.1 NEGAR -> 403 e rollback; EXIGIR_APROVACAO -> reserva PENDENTE e 4.10.
 end note
 
 @enduml

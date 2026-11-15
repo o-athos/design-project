@@ -33,6 +33,10 @@ group dentro da UnidadeDeTrabalho (transação)
   note right of cat : lock do recurso
   cat --> uc : Recurso
 
+  uc -> repo : listarPorRecurso(recurso, periodo)
+  repo --> uc : reservas do período
+  note right of agenda : AgendaRecurso montada com\no Recurso e essas reservas
+
   uc -> agenda : verificarDisponibilidade(periodo, quantidade)
 
   alt sem capacidade no período
@@ -63,14 +67,18 @@ group dentro da UnidadeDeTrabalho (transação)
         agenda --> uc : Reserva
         uc -> quotas : consumir(pedido)
         uc -> repo : salvar(reserva)
+        opt EXIGIR_APROVACAO (PENDENTE)
+          uc -> quotas : responsavelDe(projeto)
+          quotas --> uc : id do responsável
+        end
         uc -> pub : publicar(ReservaAprovada / ReservaPendente)
+        uow --> uc : commit
         uc --> rest : 201 (APROVADA ou PENDENTE)
       end
     end
   end
 
 end
-uow --> uc : commit
 deactivate uow
 
 rest --> Cliente : resposta HTTP (201 / 409 / 422 / 403)

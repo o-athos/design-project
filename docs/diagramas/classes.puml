@@ -28,13 +28,40 @@ package "reservas.dominio" {
     +id
     +estado : EstadoReserva
     +quantidade : int
+    +solicitanteId
+    +aprovadorId [0..1]
+    +dataDecisao : Instant [0..1]
     +acessoLiberado : boolean
-    +aprovar(aprovador : Usuario)
-    +rejeitar(aprovador : Usuario)
+    +aprovar(aprovadorId)
+    +rejeitar(aprovadorId)
     +ativar()
     +encerrar()
     +cancelar()
   }
+
+  abstract class EventoReserva <<evento de domínio>> {
+    +reservaId
+    +solicitanteId
+  }
+  class ReservaPendente {
+    +responsavelId
+  }
+  class ReservaAprovada {
+    +aprovadorId [0..1]
+  }
+  class ReservaRejeitada {
+    +aprovadorId
+  }
+  class ReservaCancelada
+  class ReservaAtivada
+  class ReservaEncerrada
+
+  ReservaPendente --|> EventoReserva
+  ReservaAprovada --|> EventoReserva
+  ReservaRejeitada --|> EventoReserva
+  ReservaCancelada --|> EventoReserva
+  ReservaAtivada --|> EventoReserva
+  ReservaEncerrada --|> EventoReserva
 
   class AgendaRecurso {
     +verificarDisponibilidade(periodo : Periodo, quantidade : int)
@@ -44,7 +71,7 @@ package "reservas.dominio" {
   Reserva *-- Periodo
   Reserva --> EstadoReserva
   AgendaRecurso ..> Reserva : cria
-  AgendaRecurso --> Recurso
+  AgendaRecurso --> .catalogo.Recurso
 }
 
 ' ======================= Catálogo =======================
@@ -72,21 +99,38 @@ package "catalogo" {
 package "quotas" {
   class Projeto {
     +id
-    +responsavel : Usuario
+    +responsavelId
   }
   class Quota {
+    +modo : ModoQuota
     +limite
-    +consumo
     +comporta(pedido) : boolean
     +consumir(pedido)
     +devolver(pedido)
+  }
+  enum ModoQuota {
+    ACUMULADA_MENSAL
+    CAPACIDADE_SIMULTANEA
+  }
+  class Consumo {
+    +inicio : Instant
+    +fim : Instant
+    +quantidade : int
+  }
+  class Pedido <<value object>> {
+    +projetoId
+    +tipoRecurso
+    +quantidade : int
+    +inicio : Instant
+    +fim : Instant
+    +papelSolicitante
   }
   interface ControleQuotas {
     +verificarQuota(pedido)
     +avaliarPoliticas(pedido) : Decisao
     +consumir(pedido)
     +devolver(pedido)
-    +responsavelDe(projeto) : Usuario
+    +responsavelDe(projeto) : responsavelId
     +obterParaAtualizacao(projeto, pedido) : Quota
   }
   interface PoliticaAutorizacao {
@@ -101,6 +145,11 @@ package "quotas" {
   class PoliticaGpuApenasDoutorandos
 
   Projeto *-- Quota
+  Quota --> ModoQuota
+  Quota *-- "*" Consumo
+  Quota ..> Pedido
+  ControleQuotas ..> Pedido
+  PoliticaAutorizacao ..> Pedido
   PoliticaAutorizacao ..> Decisao
   PoliticaLimiteGpuDuracao ..|> PoliticaAutorizacao
   PoliticaGpuApenasDoutorandos ..|> PoliticaAutorizacao
@@ -127,7 +176,9 @@ package "identidade" {
   interface DiretorioUsuarios {
     +buscar(id) : Usuario
   }
+  class ServicoAutenticacaoFake
   Usuario --> Papel
+  ServicoAutenticacaoFake ..|> ServicoAutenticacao
 }
 
 ' ======================= Aplicação: caso de uso e portas =======================
@@ -160,6 +211,7 @@ package "reservas.aplicacao" {
   SolicitarReservaUseCase ..> AgendaRecurso
   SolicitarReservaUseCase ..> RepositorioReservas
   SolicitarReservaUseCase ..> PublicadorEventos
+  PublicadorEventos ..> EventoReserva
 }
 
 ' ======================= Notificações =======================
@@ -176,6 +228,7 @@ package "notificacoes" {
   NotificadorFake ..|> Notificador
   TratadorDeEventos ..> Notificador
   TratadorDeEventos ..> DiretorioUsuarios
+  TratadorDeEventos ..> EventoReserva
 }
 
 ' ======================= Provisionamento =======================
@@ -186,7 +239,7 @@ package "provisionamento" {
   ProvisionadorFake ..|> Provisionador
 }
 
-Projeto --> Usuario : responsavel
 Reserva --> Projeto
+Reserva --> catalogo.Recurso
 
 @enduml
