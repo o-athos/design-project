@@ -70,7 +70,7 @@ Reservas depende de catálogo, para buscar o recurso e a capacidade dele, e de q
 
 Com notificações e provisionamento a seta é invertida. O núcleo publica eventos (`ReservaPendente`, `ReservaAprovada` e outros) e chama a porta `Provisionador`, que ele mesmo define. Notificações assina esses eventos e provisionamento implementa a porta, então são esses dois módulos que dependem de reservas. Notificações também depende de identidade, pela interface pública `DiretorioUsuarios`, para buscar o `Usuario` e o contato dele a partir dos identificadores que o evento carrega. Por isso trocar o e-mail ou o Slurm não exige mudar nada no núcleo.
 
-Quotas também não conhece `Reserva`. Ele recebe os dados do pedido no próprio vocabulário: projeto, tipo de recurso, quantidade, duração e papel do solicitante. Se recebesse a entidade, reservas e quotas passariam a depender um do outro, e uma política nova poderia obrigar a mexer em `Reserva`, o que contraria o ASR2.
+Quotas também não conhece `Reserva`. Ele recebe um `Pedido`, com os dados da solicitação no próprio vocabulário: projeto, tipo de recurso, quantidade, início, fim e papel do solicitante. Se recebesse a entidade, reservas e quotas passariam a depender um do outro, e uma política nova poderia obrigar a mexer em `Reserva`, o que contraria o ASR2.
 
 Um módulo nunca acessa as classes internas ou as tabelas de outro. A linguagem não impede que um módulo importe classes internas de outro, então essa regra será verificada por um teste de arquitetura que falha quando surgir uma dependência fora do diagrama de componentes. O risco está registrado no ADR-001.
 
