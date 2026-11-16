@@ -1,5 +1,5 @@
 import { DiretorioUsuarios } from "../identidade/index.ts";
-import { EventoReserva } from "../reservas/dominio/index.ts";
+import { EventoReserva, ReservaPendente } from "../reservas/dominio/index.ts";
 import { Notificador } from "./porta.ts";
 
 export interface TratadorDeEventosDeps {
@@ -19,6 +19,17 @@ export class TratadorDeEventos {
 
   public tratar(evento: EventoReserva): void {
     try {
+      if (evento instanceof ReservaPendente) {
+        const responsavel = this.diretorioUsuarios.buscar(evento.responsavelId);
+        if (responsavel) {
+          this.notificador.notificar(
+            responsavel,
+            `Reserva ${evento.reservaId} aguarda sua aprovação (solicitante: ${evento.solicitanteId}).`
+          );
+        }
+        return;
+      }
+
       const solicitante = this.diretorioUsuarios.buscar(evento.solicitanteId);
       if (solicitante) {
         this.notificador.notificar(
@@ -27,6 +38,7 @@ export class TratadorDeEventos {
         );
       }
     } catch (err) {
+      // ASR3: falha no notificador é registrada mas não propaga nem desfaz a reserva
       this.errosRegistrados.push(
         err instanceof Error ? err : new Error(String(err))
       );
