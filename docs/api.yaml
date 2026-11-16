@@ -1,0 +1,131 @@
+openapi: 3.0.3
+info:
+  title: Controle de Uso de Infraestrutura Computacional - DINF/UFPR
+  version: 1.0.0
+  description: >
+    API REST para gerenciamento de solicitações de recursos computacionais
+    (servidores, GPUs e armazenamento) considerando disponibilidade, quotas e
+    políticas de autorização.
+paths:
+  /reservas:
+    post:
+      summary: Solicita uma reserva de recurso computacional
+      parameters:
+        - in: header
+          name: x-usuario-id
+          schema:
+            type: string
+          required: false
+          description: Identificador da conta institucional autenticada
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - recursoId
+                - projetoId
+                - quantidade
+                - inicio
+                - fim
+              properties:
+                recursoId:
+                  type: string
+                  example: gpu-a100
+                projetoId:
+                  type: string
+                  example: proj-ia
+                quantidade:
+                  type: integer
+                  example: 2
+                inicio:
+                  type: string
+                  format: date-time
+                  example: "2026-11-20T08:00:00Z"
+                fim:
+                  type: string
+                  format: date-time
+                  example: "2026-11-20T18:00:00Z"
+      responses:
+        "201":
+          description: Reserva criada nos estados APROVADA ou PENDENTE
+        "400":
+          description: Período inválido (início >= fim) ou quantidade inválida
+        "403":
+          description: Pedido negado por política de autorização
+        "404":
+          description: Recurso ou projeto inexistente
+        "409":
+          description: Recurso indisponível no período solicitado
+        "422":
+          description: Quota do projeto excedida
+    get:
+      summary: Lista as reservas do usuário autenticado
+      parameters:
+        - in: header
+          name: x-usuario-id
+          schema:
+            type: string
+          required: false
+      responses:
+        "200":
+          description: Lista de reservas do usuário
+  /recursos/{id}/agenda:
+    get:
+      summary: Consulta a ocupação e a capacidade livre de um recurso no período
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: inicio
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: fim
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Agenda de ocupação e capacidade livre no período
+        "400":
+          description: Período de consulta inválido
+        "404":
+          description: Recurso inexistente
+  /reservas/{id}/aprovacao:
+    post:
+      summary: O responsável pelo projeto aprova ou rejeita uma reserva pendente
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Reserva aprovada ou rejeitada
+        "403":
+          description: Usuário não é responsável pelo projeto
+        "409":
+          description: Reserva não está pendente
+  /reservas/{id}:
+    delete:
+      summary: Cancela uma reserva pendente, aprovada ou ativa, devolvendo capacidade e quota
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Reserva cancelada com sucesso
+        "409":
+          description: Reserva já encerrada, cancelada ou rejeitada

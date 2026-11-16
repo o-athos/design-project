@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import {
-  CatalogoRecursosEmMemoria,
+  CatalogoRecursosSQL,
   Recurso,
   TipoRecurso,
 } from "../catalogo/index.ts";
@@ -11,14 +11,36 @@ import {
   Usuario,
 } from "../identidade/index.ts";
 import {
-  ControleQuotasEmMemoria,
+  NotificadorFake,
+  TratadorDeEventos,
+} from "../notificacoes/index.ts";
+import {
+  ControleQuotasSQL,
   ModoQuota,
-  Pedido,
+  PoliticaAutorizacao,
   Projeto,
   Quota,
 } from "../quotas/index.ts";
+import {
+  BarramentoEventosEmMemoria,
+  RepositorioReservasSQL,
+  UnidadeDeTrabalhoSQL,
+  registrarRotasReservas,
+} from "../reservas/adaptadores/index.ts";
+import { SolicitarReservaUseCase } from "../reservas/aplicacao/index.ts";
+import { criarBancoSQLite } from "./db.ts";
 
-export function criarDependenciasIniciais() {
+export interface OpcoesServidor {
+  caminhoBanco?: string;
+  politicas?: Iterable<PoliticaAutorizacao> | null;
+}
+
+export function criarDependenciasIniciais({
+  caminhoBanco = ":memory:",
+  politicas = null,
+}: OpcoesServidor = {}) {
+  const db = criarBancoSQLite(caminhoBanco);
+
   const recursos = [
     new Recurso({
       id: "gpu-a100",
@@ -39,7 +61,7 @@ export function criarDependenciasIniciais() {
       nome: "Armazenamento Ceph (50 TB)",
     }),
   ];
-  const catalogo = new CatalogoRecursosEmMemoria(recursos);
+  const catalogo = new CatalogoRecursosSQL(db, recursos);
 
   const aluno = new Usuario({
     id: "aluno-1",
@@ -89,25 +111,75 @@ export function criarDependenciasIniciais() {
     },
   });
 
-  const quotas = new ControleQuotasEmMemoria({ projetos: [projeto] });
+  const quotas = new ControleQuotasSQL({
+    db,
+    projetosIniciais: [projeto],
+    politicas,
+  });
 
-  return { catalogo, diretorioUsuarios, autenticacao, quotas, projeto };
+  const notificador = new NotificadorFake();
+  const tratadorEventos = new TratadorDeEventos({
+    diretorioUsuarios,
+    notificador,
+  });
+
+  const barramento = new BarramentoEventosEmMemoria();
+  barramento.assinar((evento) => tratadorEventos.tratar(evento));
+
+  const repositorio = new RepositorioReservasSQL(db);
+  const uow = new UnidadeDeTrabalhoSQL(db, barramento);
+
+  const solicitarReservaUseCase = new SolicitarReservaUseCase({
+    uow,
+    catalogo,
+    quotas,
+    repositorio,
+    publicador: barramento,
+  });
+
+  return {
+    db,
+    catalogo,
+    diretorioUsuarios,
+    autenticacao,
+    quotas,
+    projeto,
+    notificador,
+    tratadorEventos,
+    barramento,
+    repositorio,
+    uow,
+    solicitarReservaUseCase,
+  };
 }
 
-export function construirServidor(): FastifyInstance {
+export function construirServidor(opcoes: OpcoesServidor = {}): FastifyInstance {
   const app = Fastify({ logger: false });
-  const { catalogo, autenticacao, quotas, projeto } = criarDependenciasIniciais();
+  const deps = criarDependenciasIniciais(opcoes);
+  const {
+    catalogo,
+    autenticacao,
+    quotas,
+    notificador,
+    repositorio,
+    solicitarReservaUseCase,
+  } = deps;
+
+  app.decorate("deps", deps);
 
   app.get("/", async () => {
     return {
       sistema: "Controle de Uso de Infraestrutura Computacional - DINF/UFPR",
       status: "online",
       rotasDisponiveis: [
+        "POST /reservas",
+        "GET /reservas",
+        "GET /recursos/:id/agenda?inicio=...&fim=...",
         "GET /recursos",
         "GET /projetos (ou GET /quotas)",
         "GET /quotas/:projetoId",
-        "GET /eu (header opcional x-usuario-id: aluno-1 | doutorando-1 | orientador-1)",
-        "GET ou POST /quotas/simular?quantidade=2",
+        "GET /notificacoes",
+        "GET /eu",
       ],
     };
   });
@@ -117,7 +189,8 @@ export function construirServidor(): FastifyInstance {
   });
 
   app.get("/eu", async (request) => {
-    const credencial = (request.headers["x-usuario-id"] as string | undefined) ?? null;
+    const credencial =
+      (request.headers["x-usuario-id"] as string | undefined) ?? null;
     return autenticacao.autenticar(credencial);
   });
 
@@ -149,61 +222,28 @@ export function construirServidor(): FastifyInstance {
     const { projetoId } = request.params as { projetoId: string };
     const encontrado = quotas.listarProjetos().find((p) => p.id === projetoId);
     if (!encontrado) {
-      return reply.code(404).send({ erro: `Projeto '${projetoId}' não encontrado.` });
+      return reply
+        .code(404)
+        .send({ erro: `Projeto '${projetoId}' não encontrado.` });
     }
     return formatarProjeto(encontrado);
   });
 
-  const simularPedidoHandler = async (
-    dados: Record<string, unknown>,
-    credencial: string | null,
-    reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } }
-  ) => {
-    try {
-      const usuario = autenticacao.autenticar(credencial);
-      const pedido = new Pedido({
-        projetoId: String(dados.projetoId ?? "proj-ia"),
-        tipoRecurso: String(dados.tipoRecurso ?? "GPU"),
-        quantidade: Number(dados.quantidade ?? 2),
-        inicio: String(dados.inicio ?? "2026-11-20T08:00:00Z"),
-        fim: String(dados.fim ?? "2026-11-20T18:00:00Z"),
-        papelSolicitante: usuario.papel,
-      });
-      quotas.verificarQuota(pedido);
-      const decisao = quotas.avaliarPoliticas(pedido);
-      return {
-        usuarioAutenticado: usuario,
-        pedido: {
-          projetoId: pedido.projetoId,
-          tipoRecurso: pedido.tipoRecurso,
-          quantidade: pedido.quantidade,
-          inicio: pedido.inicio.toISOString(),
-          fim: pedido.fim.toISOString(),
-          duracaoHoras: pedido.duracaoHoras(),
-        },
-        cabeNaQuota: true,
-        decisaoPolitica: decisao,
-      };
-    } catch (err) {
-      return reply.code(422).send({
-        erro: err instanceof Error ? err.message : String(err),
-      });
-    }
-  };
-
-  app.get("/quotas/simular", async (request, reply) => {
-    const query = (request.query ?? {}) as Record<string, unknown>;
-    const credencial =
-      (query.usuario as string | undefined) ??
-      (request.headers["x-usuario-id"] as string | undefined) ??
-      null;
-    return simularPedidoHandler(query, credencial, reply);
+  app.get("/notificacoes", async () => {
+    return notificador.mensagens.map((m) => ({
+      destinatarioId: m.destinatario.id,
+      contato: m.destinatario.contato,
+      papel: m.destinatario.papel,
+      mensagem: m.mensagem,
+      enviadaEm: m.enviadaEm.toISOString(),
+    }));
   });
 
-  app.post("/quotas/simular", async (request, reply) => {
-    const body = (request.body ?? {}) as Record<string, unknown>;
-    const credencial = (request.headers["x-usuario-id"] as string | undefined) ?? null;
-    return simularPedidoHandler(body, credencial, reply);
+  registrarRotasReservas(app, {
+    autenticacao,
+    catalogo,
+    repositorio,
+    solicitarReservaUseCase,
   });
 
   return app;
@@ -219,7 +259,9 @@ if (isMain) {
   const iniciar = async (porta: number) => {
     try {
       const address = await app.listen({ port: porta, host: "0.0.0.0" });
-      console.log(`Servidor DINF rodando em http://localhost:${porta} (${address})`);
+      console.log(
+        `Servidor DINF rodando em http://localhost:${porta} (${address})`
+      );
     } catch (err: unknown) {
       if (
         err &&
