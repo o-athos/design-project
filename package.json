@@ -1,0 +1,23 @@
+{
+  "name": "dinf-cluster-reservas",
+  "version": "1.0.0",
+  "description": "Protótipo funcional - Controle de uso de infraestrutura computacional do DINF (Monolito Modular + Arquitetura Hexagonal)",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/app/main.ts",
+    "dev": "tsx watch src/app/main.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "fastify": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.13.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.6"
+  }
+}
