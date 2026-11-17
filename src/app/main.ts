@@ -29,6 +29,7 @@ import {
 } from "../reservas/adaptadores/index.ts";
 import { SolicitarReservaUseCase } from "../reservas/aplicacao/index.ts";
 import { criarBancoSQLite } from "./db.ts";
+import { PAGINA_WEB_HTML } from "./web.ts";
 
 export interface OpcoesServidor {
   caminhoBanco?: string;
@@ -157,19 +158,25 @@ export function construirServidor(opcoes: OpcoesServidor = {}): FastifyInstance 
   const app = Fastify({ logger: false });
   const deps = criarDependenciasIniciais(opcoes);
   const {
+    db,
     catalogo,
     autenticacao,
     quotas,
     notificador,
+    barramento,
     repositorio,
     solicitarReservaUseCase,
   } = deps;
 
   app.decorate("deps", deps);
 
-  app.get("/", async () => {
+  app.get("/", async (request, reply) => {
+    const accept = request.headers.accept ?? "";
+    if (accept.includes("text/html")) {
+      return reply.type("text/html; charset=utf-8").send(PAGINA_WEB_HTML);
+    }
     return {
-      sistema: "Controle de Uso de Infraestrutura Computacional - DINF/UFPR",
+      sistema: "Controle de infraestrutura computacional - DINF",
       status: "online",
       rotasDisponiveis: [
         "POST /reservas",
@@ -237,6 +244,13 @@ export function construirServidor(opcoes: OpcoesServidor = {}): FastifyInstance 
       mensagem: m.mensagem,
       enviadaEm: m.enviadaEm.toISOString(),
     }));
+  });
+
+  app.post("/reset", async () => {
+    db.exec(`DELETE FROM reservas; DELETE FROM quotas_consumos;`);
+    notificador.mensagens.length = 0;
+    barramento.historicoEntregues.length = 0;
+    return { ok: true };
   });
 
   registrarRotasReservas(app, {
