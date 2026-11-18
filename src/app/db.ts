@@ -5,6 +5,8 @@ export function criarBancoSQLite(caminho = ":memory:"): DatabaseType {
   const db = new Database(caminho);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
+  // Espera o lock de escrita. Sem, a segunda conexão falha na hora com SQLITE_BUSY
+  db.pragma("busy_timeout = 10000");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS catalogo_recursos (

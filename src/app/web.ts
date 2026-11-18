@@ -589,10 +589,20 @@ export const PAGINA_WEB_HTML = `<!DOCTYPE html>
       return \`\${String(d.getUTCDate()).padStart(2,'0')}/\${String(d.getUTCMonth()+1).padStart(2,'0')} \${String(d.getUTCHours()).padStart(2,'0')}:\${String(d.getUTCMinutes()).padStart(2,'0')}\`;
     }
 
-    function calcularUsado(q) {
+    function calcularUsado(q, referenciaIso) {
       const c = q.consumosRegistrados || [];
       if (q.modo === "ACUMULADA_MENSAL") {
-        return c.reduce((a, x) => a + x.quantidade * ((new Date(x.fim) - new Date(x.inicio)) / 3600000), 0);
+        const ref = new Date(referenciaIso);
+        const ano = ref.getUTCFullYear();
+        const mes = ref.getUTCMonth();
+        return c.reduce((total, x) => {
+          const inicio = new Date(x.inicio);
+          if (inicio.getUTCFullYear() !== ano || inicio.getUTCMonth() !== mes) {
+            return total;
+          }
+          const horas = (new Date(x.fim).getTime() - inicio.getTime()) / 3600000;
+          return total + x.quantidade * horas;
+        }, 0);
       }
       let p = 0;
       for (const x of c) {
@@ -663,13 +673,17 @@ export const PAGINA_WEB_HTML = `<!DOCTYPE html>
       const proj = projetos[0];
       if (proj) {
         document.getElementById("painelQuotas").innerHTML = Object.entries(proj.quotas).map(([tipo, q]) => {
-          const usado = Number(calcularUsado(q).toFixed(1));
+          const usado = Number(calcularUsado(q, ini).toFixed(1));
           const pct = Math.min(100, Math.round((usado / q.limite) * 100));
           const un = q.modo === "ACUMULADA_MENSAL" ? "h" : "TB";
+          const ref = new Date(ini);
+          const titulo = q.modo === "ACUMULADA_MENSAL"
+            ? tipo + " " + String(ref.getUTCMonth() + 1).padStart(2, "0") + "/" + ref.getUTCFullYear()
+            : tipo;
           return \`
             <div class="quota-box">
               <div class="quota-top">
-                <span style="color:var(--muted)">\${tipo}</span>
+                <span style="color:var(--muted)">\${titulo}</span>
                 <span>\${usado} / \${q.limite} \${un}</span>
               </div>
               <div class="bar-bg"><div class="bar-fill" style="width:\${pct}%"></div></div>

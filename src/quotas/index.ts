@@ -23,4 +23,3 @@ export {
   type ControleQuotasEmMemoriaProps,
   combinarDecisoes,
 } from "./servico.ts";
-export { ControleQuotasSQL } from "./repositorioSql.ts";

@@ -29,13 +29,21 @@ export class BarramentoEventosEmMemoria implements PublicadorEventos {
     this.entregarImediatamente(evento);
   }
 
-  public despacharPosCommit(): void {
+  public retirarFilaPosCommit(): EventoReserva[] {
     const paraEntregar = [...this.filaPendente];
     this.filaPendente = [];
     this.emTransacao = false;
-    for (const evento of paraEntregar) {
+    return paraEntregar;
+  }
+
+  public entregar(eventos: EventoReserva[]): void {
+    for (const evento of eventos) {
       this.entregarImediatamente(evento);
     }
+  }
+
+  public despacharPosCommit(): void {
+    this.entregar(this.retirarFilaPosCommit());
   }
 
   public descartarFilaRollback(): void {

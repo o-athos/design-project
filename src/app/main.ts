@@ -1,9 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
-import {
-  CatalogoRecursosSQL,
-  Recurso,
-  TipoRecurso,
-} from "../catalogo/index.ts";
+import { Recurso, TipoRecurso } from "../catalogo/index.ts";
+import { CatalogoRecursosSQL } from "../catalogo/repositorioSql.ts";
 import {
   DiretorioUsuariosEmMemoria,
   Papel,
@@ -15,12 +12,12 @@ import {
   TratadorDeEventos,
 } from "../notificacoes/index.ts";
 import {
-  ControleQuotasSQL,
   ModoQuota,
   PoliticaAutorizacao,
   Projeto,
   Quota,
 } from "../quotas/index.ts";
+import { ControleQuotasSQL } from "../quotas/repositorioSql.ts";
 import {
   BarramentoEventosEmMemoria,
   RepositorioReservasSQL,

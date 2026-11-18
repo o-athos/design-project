@@ -117,8 +117,14 @@ function montarAmbienteEmMemoria() {
   };
 }
 
+function entregarAvisos(): Promise<void> {
+  return new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+}
+
 describe("Caso de Uso - SolicitarReservaUseCase com Fakes sem rede (ASR2 e ASR3)", () => {
-  it("aprova automaticamente pedido dentro do limite e notifica o solicitante", () => {
+  it("aprova automaticamente pedido dentro do limite e notifica o solicitante", async () => {
     const { useCase, autenticacao, repositorio, notificador } =
       montarAmbienteEmMemoria();
     const usuario = autenticacao.autenticar("aluno-1");
@@ -135,11 +141,15 @@ describe("Caso de Uso - SolicitarReservaUseCase com Fakes sem rede (ASR2 e ASR3)
 
     expect(reserva.estado).toBe(EstadoReserva.APROVADA);
     expect(repositorio.buscarPorId(reserva.id)).not.toBeNull();
+    expect(notificador.mensagens).toHaveLength(0);
+
+    await entregarAvisos();
+
     expect(notificador.mensagens).toHaveLength(1);
     expect(notificador.mensagens[0].destinatario.id).toBe("aluno-1");
   });
 
-  it("cria reserva PENDENTE quando exige aprovação (> 2 GPUs) e notifica o responsável do projeto", () => {
+  it("cria reserva PENDENTE quando exige aprovação (> 2 GPUs) e notifica o responsável do projeto", async () => {
     const { useCase, notificador } = montarAmbienteEmMemoria();
 
     const reserva = useCase.executar({
@@ -153,11 +163,15 @@ describe("Caso de Uso - SolicitarReservaUseCase com Fakes sem rede (ASR2 e ASR3)
     });
 
     expect(reserva.estado).toBe(EstadoReserva.PENDENTE);
+    expect(notificador.mensagens).toHaveLength(0);
+
+    await entregarAvisos();
+
     expect(notificador.mensagens).toHaveLength(1);
     expect(notificador.mensagens[0].destinatario.id).toBe("orientador-1");
   });
 
-  it("recusa por indisponibilidade (409) sem criar reserva nem enviar notificação", () => {
+  it("recusa por indisponibilidade (409) sem criar reserva nem enviar notificação", async () => {
     const { useCase, repositorio, notificador } = montarAmbienteEmMemoria();
 
     useCase.executar({
@@ -183,6 +197,10 @@ describe("Caso de Uso - SolicitarReservaUseCase com Fakes sem rede (ASR2 e ASR3)
     ).toThrow(RecursoIndisponivelError);
 
     expect(repositorio.listarTodas()).toHaveLength(1);
+    expect(notificador.mensagens).toHaveLength(0);
+
+    await entregarAvisos();
+
     expect(notificador.mensagens).toHaveLength(1);
   });
 
@@ -231,7 +249,7 @@ describe("Caso de Uso - SolicitarReservaUseCase com Fakes sem rede (ASR2 e ASR3)
     expect(reservaDoutorando.estado).toBe(EstadoReserva.APROVADA);
   });
 
-  it("ASR3: uma falha no Notificador nunca impede nem desfaz a criação da reserva", () => {
+  it("ASR3: uma falha no Notificador nunca impede nem desfaz a criação da reserva", async () => {
     const { useCase, notificador, tratador, repositorio } =
       montarAmbienteEmMemoria();
     notificador.simularFalha = true;
@@ -247,6 +265,11 @@ describe("Caso de Uso - SolicitarReservaUseCase com Fakes sem rede (ASR2 e ASR3)
     });
 
     expect(reserva.estado).toBe(EstadoReserva.APROVADA);
+    expect(repositorio.buscarPorId(reserva.id)).not.toBeNull();
+    expect(tratador.errosRegistrados).toHaveLength(0);
+
+    await entregarAvisos();
+
     expect(repositorio.buscarPorId(reserva.id)).not.toBeNull();
     expect(tratador.errosRegistrados).toHaveLength(1);
   });

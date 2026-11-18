@@ -4,4 +4,3 @@ export {
   type CatalogoRecursos,
   CatalogoRecursosEmMemoria,
 } from "./servico.ts";
-export { CatalogoRecursosSQL } from "./repositorioSql.ts";
