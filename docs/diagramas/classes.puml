@@ -26,6 +26,8 @@ package "reservas.dominio" {
 
   class Reserva {
     +id
+    +recursoId
+    +projetoId
     +estado : EstadoReserva
     +quantidade : int
     +solicitanteId
@@ -119,6 +121,7 @@ package "quotas" {
   }
   class Pedido <<value object>> {
     +projetoId
+    +recursoId
     +tipoRecurso
     +quantidade : int
     +inicio : Instant
@@ -239,7 +242,10 @@ package "provisionamento" {
   ProvisionadorFake ..|> Provisionador
 }
 
-Reserva --> Projeto
-Reserva --> catalogo.Recurso
+note bottom of Reserva
+  Reserva guarda recurso, projeto e usuários
+  apenas pelo id: reservas não depende das
+  entidades de quotas nem de identidade.
+end note
 
 @enduml

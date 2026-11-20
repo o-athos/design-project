@@ -43,7 +43,7 @@ d) Restrições
 e) ASRs
 
 - ASR1 - Consistência de alocação sob concorrência: solicitações simultâneas para o mesmo recurso e período nunca podem resultar em alocação acima da capacidade,  
-e nenhuma solicitação aceita pode fazer um projeto exceder sua quota. Reservas pendentes e aprovadas contam para a capacidade e para a quota. (Recurso com 1 GPU livre num horário e 20 pedidos simultâneos de 1 GPU para esse horário, todos dentro do limite de aprovação automática: exatamente 1 vira reserva aprovada e 19 são recusados por indisponibilidade, sem criar reserva.)
+e nenhuma solicitação aceita pode fazer um projeto exceder sua quota. Reservas pendentes, aprovadas e ativas contam para a capacidade e para a quota. (Recurso com 1 GPU livre num horário e 20 pedidos simultâneos de 1 GPU para esse horário, todos dentro do limite de aprovação automática: exatamente 1 vira reserva aprovada e 19 são recusados por indisponibilidade, sem criar reserva.)
 
 - ASR2 - Modificabilidade das políticas de autorização: uma nova regra ("GPU XYZ apenas para doutorandos") deve ser adicionada criando uma nova classe de política,  
 sem alterar o caso de uso de solicitação nem as entidades existentes. Os limites de quota são dados configurados pelo administrador, então mudar um limite não exige mudar código.

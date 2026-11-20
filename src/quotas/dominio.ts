@@ -42,6 +42,7 @@ export class Consumo {
 
 export interface PedidoProps {
   projetoId: string;
+  recursoId: string;
   tipoRecurso: string;
   quantidade: number;
   inicio: Date | string;
@@ -51,6 +52,7 @@ export interface PedidoProps {
 
 export class Pedido {
   public readonly projetoId: string;
+  public readonly recursoId: string;
   public readonly tipoRecurso: string;
   public readonly quantidade: number;
   public readonly inicio: Date;
@@ -59,6 +61,7 @@ export class Pedido {
 
   constructor({
     projetoId,
+    recursoId,
     tipoRecurso,
     quantidade,
     inicio,
@@ -66,6 +69,7 @@ export class Pedido {
     papelSolicitante,
   }: PedidoProps) {
     this.projetoId = projetoId;
+    this.recursoId = recursoId;
     this.tipoRecurso = String(tipoRecurso);
     this.quantidade = Number(quantidade);
     this.inicio = paraData(inicio);

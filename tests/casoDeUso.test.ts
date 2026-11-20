@@ -222,12 +222,16 @@ describe("Caso de Uso - SolicitarReservaUseCase com Fakes sem rede (ASR2 e ASR3)
   });
 
   it("ASR2 (OCP): permite plugar PoliticaGpuApenasDoutorandos sem alterar o caso de uso nem entidades", () => {
-    const { useCase, quotas } = montarAmbienteEmMemoria();
-    quotas.adicionarPolitica(new PoliticaGpuApenasDoutorandos());
+    const { useCase, quotas, catalogo } = montarAmbienteEmMemoria();
+    catalogo.cadastrar(
+      new Recurso({ id: "gpu-xyz", tipo: TipoRecurso.GPU, capacidade: 2, nome: "GPU XYZ" })
+    );
+    // a regra vale só para a GPU XYZ
+    quotas.adicionarPolitica(new PoliticaGpuApenasDoutorandos(["gpu-xyz"]));
 
     expect(() =>
       useCase.executar({
-        recursoId: "gpu-a100",
+        recursoId: "gpu-xyz",
         projetoId: "proj-ia",
         solicitanteId: "aluno-1",
         papelSolicitante: Papel.ALUNO,
@@ -237,8 +241,20 @@ describe("Caso de Uso - SolicitarReservaUseCase com Fakes sem rede (ASR2 e ASR3)
       })
     ).toThrow(PedidoNegadoPorPoliticaError);
 
-    const reservaDoutorando = useCase.executar({
+    // outras GPUs continuam liberadas para o aluno
+    const reservaAlunoOutraGpu = useCase.executar({
       recursoId: "gpu-a100",
+      projetoId: "proj-ia",
+      solicitanteId: "aluno-1",
+      papelSolicitante: Papel.ALUNO,
+      quantidade: 1,
+      inicio: "2026-11-20T08:00:00Z",
+      fim: "2026-11-20T12:00:00Z",
+    });
+    expect(reservaAlunoOutraGpu.estado).toBe(EstadoReserva.APROVADA);
+
+    const reservaDoutorando = useCase.executar({
+      recursoId: "gpu-xyz",
       projetoId: "proj-ia",
       solicitanteId: "doutorando-1",
       papelSolicitante: Papel.DOUTORANDO,

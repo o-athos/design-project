@@ -61,8 +61,22 @@ tests/
 |-- concorrencia.test.ts      Testes de concorrência reais com worker threads contra SQLite (ASR1 / ADR-003)
 |-- concorrencia.worker.ts    Worker utilizado nos testes de concorrência
 |-- apiRest.test.ts           Testes de integração HTTP nos endpoints REST
-`-- arquitetura.test.ts       Verificação automatizada das fronteiras entre módulos (ADR-001)
+`-- arquitetura.test.ts       Verifica as dependências entre módulos contra o diagrama de componentes (ADR-001 e ADR-002)
 ```
+
+---
+
+## Escopo do Protótipo (fatia vertical)
+
+O protótipo implementa a fatia **solicitar reserva** (`POST /reservas`) e as consultas, como pede o item 7 do enunciado. Aprovar, cancelar, o agendador (ativar, encerrar e revogar acesso) e o uso do `Provisionador` fazem parte do design descrito em [docs/arquitetura.md](docs/arquitetura.md), mas não desta fatia. No [docs/api.yaml](docs/api.yaml), as rotas fora da fatia estão marcadas com `x-implementado: false`.
+
+| Item exigido (enunciado, item 7) | Como é atendido |
+|---|---|
+| Caso de uso que modifica estado | `POST /reservas` cria a reserva APROVADA ou PENDENTE |
+| Consulta | `GET /reservas` e `GET /recursos/{id}/agenda` |
+| Fluxo alternativo/erro | 409 recurso indisponível, 422 quota excedida, 403 negado por política, PENDENTE quando exige aprovação |
+| Persistência | SQLite via `RepositorioReservas`, dentro da `UnidadeDeTrabalho` |
+| Dependência externa | `Notificador` (`NotificadorFake` na composição e nos testes; `EmailNotificador` simulado) |
 
 ---
 
@@ -81,6 +95,8 @@ npm install
 npm start
 ```
 Abra no navegador: **`http://localhost:3333`**
+
+O servidor iniciado pelo `npm start` liga o modo de demonstração, que registra a rota `POST /reset` usada pelo botão de limpar dados da interface web. Com `DEMO=0`, ou quando o servidor é montado nos testes, a rota não existe.
 
 ### 3. Executar a suíte de testes automatizados
 ```bash

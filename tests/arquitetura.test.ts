@@ -4,6 +4,15 @@ import { describe, expect, it } from "vitest";
 
 const SRC_DIR = path.resolve(import.meta.dirname, "../src");
 
+const DEPENDENCIAS_PERMITIDAS: Record<string, string[]> = {
+  catalogo: [],
+  quotas: [],
+  identidade: [],
+  reservas: ["catalogo", "quotas", "identidade"],
+  notificacoes: ["reservas", "identidade"],
+  provisionamento: ["reservas"],
+};
+
 function listarArquivosTs(dir: string): string[] {
   const resultado: string[] = [];
   for (const entrada of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -19,7 +28,7 @@ function listarArquivosTs(dir: string): string[] {
 
 function extrairImports(arquivo: string): string[] {
   const conteudo = fs.readFileSync(arquivo, "utf-8");
-  const regex = /from\s+["']([^"']+)["']/g;
+  const regex = /(?:from|import)\s+["']([^"']+)["']/g;
   const imports: string[] = [];
   let match: RegExpExecArray | null;
   while ((match = regex.exec(conteudo)) !== null) {
@@ -28,17 +37,59 @@ function extrairImports(arquivo: string): string[] {
   return imports;
 }
 
+function moduloDe(caminhoAbsoluto: string): string {
+  return path.relative(SRC_DIR, caminhoAbsoluto).split(path.sep)[0];
+}
+
+interface ImportEntreModulos {
+  arquivo: string;
+  importacao: string;
+  destino: string;
+}
+
+function importsParaOutrosModulos(modulo: string): ImportEntreModulos[] {
+  const resultado: ImportEntreModulos[] = [];
+  for (const arquivo of listarArquivosTs(path.join(SRC_DIR, modulo))) {
+    for (const importacao of extrairImports(arquivo)) {
+      if (!importacao.startsWith(".")) {
+        continue; // pacote externo
+      }
+      const destino = moduloDe(path.resolve(path.dirname(arquivo), importacao));
+      if (destino !== modulo) {
+        resultado.push({ arquivo, importacao, destino });
+      }
+    }
+  }
+  return resultado;
+}
+
 describe("Teste de Arquitetura - Fronteiras de Módulos e Hexagonal (ADR-001 e ADR-002)", () => {
-  it("módulos de suporte (catalogo, quotas, identidade) não dependem de reservas nem entre si", () => {
-    for (const modulo of ["catalogo", "quotas", "identidade"]) {
-      const arquivos = listarArquivosTs(path.join(SRC_DIR, modulo));
-      for (const arq of arquivos) {
-        const imports = extrairImports(arq);
-        for (const imp of imports) {
-          expect(imp, `Violação em ${arq}: importou ${imp}`).not.toMatch(
-            /\.\.\/(reservas|notificacoes|provisionamento|catalogo|quotas|identidade)/
-          );
-        }
+  it("cada módulo só depende dos módulos previstos no diagrama de componentes", () => {
+    for (const [modulo, permitidos] of Object.entries(DEPENDENCIAS_PERMITIDAS)) {
+      for (const { arquivo, importacao, destino } of importsParaOutrosModulos(modulo)) {
+        expect(
+          permitidos,
+          `Dependência fora do diagrama em ${arquivo}: ${modulo} -> ${destino} (${importacao})`
+        ).toContain(destino);
+      }
+    }
+  });
+
+  it("módulos só se usam pela interface pública (index.ts), nunca por arquivos internos", () => {
+    for (const modulo of Object.keys(DEPENDENCIAS_PERMITIDAS)) {
+      for (const { arquivo, importacao } of importsParaOutrosModulos(modulo)) {
+        expect(
+          importacao.endsWith("/index.ts"),
+          `Acesso a arquivo interno de outro módulo em ${arquivo}: ${importacao}`
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("nenhum módulo de negócio depende de app/ (composition root)", () => {
+    for (const modulo of Object.keys(DEPENDENCIAS_PERMITIDAS)) {
+      for (const { arquivo, destino } of importsParaOutrosModulos(modulo)) {
+        expect(destino, `${arquivo} importa app/`).not.toBe("app");
       }
     }
   });
@@ -55,21 +106,6 @@ describe("Teste de Arquitetura - Fronteiras de Módulos e Hexagonal (ADR-001 e A
         expect(imp, `Violação hexagonal em ${arq}: ${imp}`).not.toMatch(
           /(fastify|better-sqlite3|notificacoes|provisionamento|adaptadores)/
         );
-      }
-    }
-  });
-
-  it("reservas só importa outros módulos pela interface pública (index.ts), nunca arquivos internos", () => {
-    const arquivosReservas = listarArquivosTs(path.join(SRC_DIR, "reservas"));
-    for (const arq of arquivosReservas) {
-      const imports = extrairImports(arq);
-      for (const imp of imports) {
-        if (imp.includes("catalogo/") || imp.includes("quotas/") || imp.includes("identidade/")) {
-          expect(
-            imp.endsWith("/index.ts"),
-            `Acesso a classe interna de outro módulo em ${arq}: ${imp}`
-          ).toBe(true);
-        }
       }
     }
   });

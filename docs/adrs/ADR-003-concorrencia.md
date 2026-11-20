@@ -13,7 +13,7 @@ Várias pessoas podem solicitar o mesmo recurso no mesmo período ao mesmo tempo
 ## 2. Problema e forças envolvidas
 
 - **ASR1:** com 1 GPU livre num horário, 20 pedidos simultâneos de 1 GPU para esse horário, todos dentro do limite de aprovação automática, devem resultar em exatamente 1 reserva aprovada e 19 pedidos recusados por indisponibilidade, sem criar reserva. Nenhuma solicitação aceita pode fazer um projeto exceder a quota.
-- Reservas pendentes e aprovadas contam para a capacidade e para a quota, então a garantia vale já na solicitação, e não só na aprovação.
+- Reservas pendentes, aprovadas e ativas contam para a capacidade e para a quota, então a garantia vale já na solicitação, e não só na aprovação.
 - Os recursos são heterogêneos: GPU é contável, storage é medido em capacidade e servidor pode ser de uso exclusivo. Para recursos de uso exclusivo, a regra é "não sobrepor períodos"; para recursos contáveis, é soma das quantidades sobrepostas ser menor ou igual a capacidade.
 - A garantia deve valer mesmo que o código da aplicação tenha um erro ou que existam várias instâncias da API.
 - Um dos pontos fortes da decisão do ADR-001 é a transação local única.

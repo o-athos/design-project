@@ -58,6 +58,7 @@ describe("Domínio - Quota nos dois modos de ModoQuota (RF04)", () => {
     // 2 GPUs * 30h = 60 GPU-horas em novembro (cabe em 100)
     const p1 = new Pedido({
       projetoId: "proj-ia",
+      recursoId: "gpu-a100",
       tipoRecurso: "GPU",
       quantidade: 2,
       inicio: "2026-11-30T10:00:00Z",
@@ -70,6 +71,7 @@ describe("Domínio - Quota nos dois modos de ModoQuota (RF04)", () => {
     // Mais 2 GPUs * 25h = 50 GPU-horas em novembro -> 60 + 50 = 110 > 100 (não cabe)
     const p2Novembro = new Pedido({
       projetoId: "proj-ia",
+      recursoId: "gpu-a100",
       tipoRecurso: "GPU",
       quantidade: 2,
       inicio: "2026-11-15T00:00:00Z",
@@ -81,6 +83,7 @@ describe("Domínio - Quota nos dois modos de ModoQuota (RF04)", () => {
     // Pedido começando em dezembro tem saldo limpo de dezembro (cabe)
     const p3Dezembro = new Pedido({
       projetoId: "proj-ia",
+      recursoId: "gpu-a100",
       tipoRecurso: "GPU",
       quantidade: 2,
       inicio: "2026-12-05T00:00:00Z",
@@ -98,6 +101,7 @@ describe("Domínio - Quota nos dois modos de ModoQuota (RF04)", () => {
 
     const p1 = new Pedido({
       projetoId: "proj-ia",
+      recursoId: "stg-ceph",
       tipoRecurso: "STORAGE",
       quantidade: 15,
       inicio: "2026-11-10T08:00:00Z",
@@ -110,6 +114,7 @@ describe("Domínio - Quota nos dois modos de ModoQuota (RF04)", () => {
     // 15 TB em período que NÃO se sobrepõe 
     const p2SemSobreposicao = new Pedido({
       projetoId: "proj-ia",
+      recursoId: "stg-ceph",
       tipoRecurso: "STORAGE",
       quantidade: 15,
       inicio: "2026-11-13T08:00:00Z",
@@ -122,6 +127,7 @@ describe("Domínio - Quota nos dois modos de ModoQuota (RF04)", () => {
     // 10 TB sobrepondo com p1 (15 + 10 = 25 > 20 -> não cabe)
     const p3Sobreposto = new Pedido({
       projetoId: "proj-ia",
+      recursoId: "stg-ceph",
       tipoRecurso: "STORAGE",
       quantidade: 10,
       inicio: "2026-11-11T08:00:00Z",
@@ -142,6 +148,7 @@ describe("Domínio - Políticas de Autorização (RF05 / ASR2)", () => {
 
     const pedidoAuto = new Pedido({
       projetoId: "proj-ia",
+      recursoId: "gpu-a100",
       tipoRecurso: "GPU",
       quantidade: 2,
       inicio: "2026-11-20T08:00:00Z",
@@ -152,6 +159,7 @@ describe("Domínio - Políticas de Autorização (RF05 / ASR2)", () => {
 
     const pedidoMuitasGpus = new Pedido({
       projetoId: "proj-ia",
+      recursoId: "gpu-a100",
       tipoRecurso: "GPU",
       quantidade: 3,
       inicio: "2026-11-20T08:00:00Z",
@@ -162,6 +170,7 @@ describe("Domínio - Políticas de Autorização (RF05 / ASR2)", () => {
 
     const pedidoLongo = new Pedido({
       projetoId: "proj-ia",
+      recursoId: "srv-dgx",
       tipoRecurso: "SERVIDOR",
       quantidade: 1,
       inicio: "2026-11-20T08:00:00Z",
@@ -174,10 +183,11 @@ describe("Domínio - Políticas de Autorização (RF05 / ASR2)", () => {
   it("combinarDecisoes aplica a decisão mais restritiva (NEGAR > EXIGIR_APROVACAO > AUTO_APROVAR)", () => {
     const politicas = [
       new PoliticaLimiteGpuDuracao(),
-      new PoliticaGpuApenasDoutorandos(),
+      new PoliticaGpuApenasDoutorandos(["gpu-a100"]),
     ];
     const pedidoAluno = new Pedido({
       projetoId: "proj-ia",
+      recursoId: "gpu-a100",
       tipoRecurso: "GPU",
       quantidade: 1,
       inicio: "2026-11-20T08:00:00Z",

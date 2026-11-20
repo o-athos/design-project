@@ -83,6 +83,7 @@ export class SolicitarReservaUseCase {
 
       const pedido = new Pedido({
         projetoId: comando.projetoId,
+        recursoId: recurso.id,
         tipoRecurso: recurso.tipo,
         quantidade: comando.quantidade,
         inicio: periodo.inicio,

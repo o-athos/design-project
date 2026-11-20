@@ -35,22 +35,27 @@ export class PoliticaLimiteGpuDuracao implements PoliticaAutorizacao {
   }
 }
 
+// "GPU XYZ apenas para doutorandos" (ASR2): nega os recursos listados a quem
+// não tem um dos papéis permitidos
 export class PoliticaGpuApenasDoutorandos implements PoliticaAutorizacao {
+  private readonly recursosRestritos: Set<string>;
   private readonly papeisPermitidos: Set<string>;
 
   constructor(
+    recursosRestritos: Iterable<string>,
     papeisPermitidos: Iterable<string> = [
       "DOUTORANDO",
       "ORIENTADOR",
       "ADMINISTRADOR",
     ]
   ) {
+    this.recursosRestritos = new Set(recursosRestritos);
     this.papeisPermitidos = new Set(papeisPermitidos);
   }
 
   public avaliar(pedido: Pedido): Decisao {
     if (
-      pedido.tipoRecurso === "GPU" &&
+      this.recursosRestritos.has(pedido.recursoId) &&
       !this.papeisPermitidos.has(pedido.papelSolicitante)
     ) {
       return Decisao.NEGAR;

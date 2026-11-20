@@ -40,7 +40,11 @@ src/
 
 Nem todo módulo precisa das três pastas. Catálogo e identidade são pequenos e podem ficar num nível só, mas seguem a mesma regra de dependência. Reservas, que é o núcleo, usa a divisão completa.
 
-A pasta `app/` não é um módulo de negócio. Ela monta o sistema: cria os adaptadores concretos (`EmailNotificador`, `ProvisionadorFake`, os repositórios SQL e a `UnidadeDeTrabalho` SQL) e entrega cada um à porta correspondente. Como é o único lugar que conhece essas classes, trocar uma implementação é uma mudança de configuração feita ali.
+A árvore acima é a do sistema projetado. O protótipo implementa a fatia vertical "solicitar reserva" (ver README, seção "Escopo do protótipo"): em `reservas/aplicacao` existe apenas o `SolicitarReservaUseCase`, e em `reservas/adaptadores` não há agendador. As portas `Provisionador` e os adaptadores `SlurmProvisionador` e `ProvisionadorFake` existem no código, mas não são exercidos nesta fatia.
+
+A pasta `app/` não é um módulo de negócio. Ela monta o sistema: cria os adaptadores concretos e entrega cada um à porta correspondente. No protótipo, a composição usa os repositórios SQL, a `UnidadeDeTrabalho` SQL, o barramento de eventos em memória e o `NotificadorFake`; o `Provisionador` não é ligado porque é usado na ativação da reserva, fora da fatia. Como `app/` é o único lugar que conhece essas classes, trocar uma implementação é uma mudança de configuração feita ali.
+
+Para a interface web de demonstração, `app/` também expõe algumas rotas de apoio que não fazem parte da API do sistema: `GET /recursos`, `GET /projetos`, `GET /quotas`, `GET /notificacoes` e `GET /eu`, e `POST /reset`, que apaga reservas e consumos e só é registrada com o modo de demonstração ligado (padrão do `npm start`; `DEMO=0` desliga).
 
 ## Módulos
 
@@ -50,7 +54,7 @@ Nem toda mudança de estado começa com uma requisição. A reserva vira ATIVA q
 
 Dois módulos dão suporte às regras do núcleo. Catálogo cadastra e consulta os recursos com tipo e capacidade (`Recurso`, RF01). Quotas e Políticas guarda as quotas e o consumo de cada projeto, sabe quem é o responsável por ele e decide, por meio de políticas plugáveis, se um pedido é aprovado direto, se precisa de aprovação ou se é negado (`Projeto`, `Quota` e `PoliticaAutorizacao`, RF04 e RF05).
 
-Os demais existem para isolar sistemas externos. Notificações avisa solicitante e aprovador quando uma reserva muda de estado (RF08). Provisionamento libera o acesso ao recurso no sistema externo quando a reserva começa e retira quando ela termina ou é cancelada (RF09). Identidade reconhece o usuário pela conta institucional, como exigem as restrições, e devolve um `Usuario` com o papel e o contato dele: aluno, doutorando, orientador ou administrador.
+Os demais existem para isolar sistemas externos. Notificações avisa os envolvidos quando uma reserva muda de estado (RF08): o responsável do projeto quando a reserva fica pendente, e o solicitante nas demais mudanças (o solicitante de uma reserva pendente já recebe o estado na resposta HTTP). Provisionamento libera o acesso ao recurso no sistema externo quando a reserva começa e retira quando ela termina ou é cancelada (RF09). Identidade reconhece o usuário pela conta institucional, como exigem as restrições, e devolve um `Usuario` com o papel e o contato dele: aluno, doutorando, orientador ou administrador.
 
 ## Dependências entre os módulos
 
@@ -70,7 +74,7 @@ Reservas depende de catálogo, para buscar o recurso e a capacidade dele, e de q
 
 Com notificações e provisionamento a seta é invertida. O núcleo publica eventos (`ReservaPendente`, `ReservaAprovada` e outros) e chama a porta `Provisionador`, que ele mesmo define. Notificações assina esses eventos e provisionamento implementa a porta, então são esses dois módulos que dependem de reservas. Notificações também depende de identidade, pela interface pública `DiretorioUsuarios`, para buscar o `Usuario` e o contato dele a partir dos identificadores que o evento carrega. Por isso trocar o e-mail ou o Slurm não exige mudar nada no núcleo.
 
-Quotas também não conhece `Reserva`. Ele recebe um `Pedido`, com os dados da solicitação no próprio vocabulário: projeto, tipo de recurso, quantidade, início, fim e papel do solicitante. Se recebesse a entidade, reservas e quotas passariam a depender um do outro, e uma política nova poderia obrigar a mexer em `Reserva`, o que contraria o ASR2.
+Quotas também não conhece `Reserva`. Ele recebe um `Pedido`, com os dados da solicitação no próprio vocabulário: projeto, recurso, tipo de recurso, quantidade, início, fim e papel do solicitante. O recurso vai como id, um tipo simples, então quotas não passa a depender de catálogo. Se recebesse a entidade, reservas e quotas passariam a depender um do outro, e uma política nova poderia obrigar a mexer em `Reserva`, o que contraria o ASR2.
 
 Um módulo nunca acessa as classes internas ou as tabelas de outro. A linguagem não impede que um módulo importe classes internas de outro, então essa regra será verificada por um teste de arquitetura que falha quando surgir uma dependência fora do diagrama de componentes. O risco está registrado no ADR-001.
 
@@ -84,7 +88,7 @@ As portas de saída do núcleo ficam em `reservas/aplicacao`. `RepositorioReserv
 
 `Notificador` pertence ao módulo de notificações e é usado pelo tratador de eventos, que passa o `Usuario` destinatário e a mensagem, e não um endereço de e-mail. As implementações são `EmailNotificador` e `NotificadorFake`. `ServicoAutenticacao` pertence a identidade e é usado pelo adaptador REST. No protótipo ele é implementado por `ServicoAutenticacaoFake`, com um usuário fixo; na versão real seria LDAP ou SSO.
 
-`PoliticaAutorizacao` é o ponto de extensão do módulo de quotas. Cada política devolve `AUTO_APROVAR`, `EXIGIR_APROVACAO` ou `NEGAR`, e quando várias se aplicam ao mesmo pedido vale a mais restritiva. A primeira implementação é `PoliticaLimiteGpuDuracao`, que exige aprovação para mais de 2 GPUs ou mais de 72h. Para criar a regra "GPU XYZ apenas para doutorandos", basta escrever `PoliticaGpuApenasDoutorandos` e registrá-la em `app/`. O `SolicitarReservaUseCase` recebe a lista de políticas por injeção e continua igual.
+`PoliticaAutorizacao` é o ponto de extensão do módulo de quotas. Cada política devolve `AUTO_APROVAR`, `EXIGIR_APROVACAO` ou `NEGAR`, e quando várias se aplicam ao mesmo pedido vale a mais restritiva. A primeira implementação é `PoliticaLimiteGpuDuracao`, que exige aprovação para mais de 2 GPUs ou mais de 72h. Para criar a regra "GPU XYZ apenas para doutorandos", basta escrever `PoliticaGpuApenasDoutorandos`, que nega os recursos indicados (pelo `recursoId` do `Pedido`) a quem não é doutorando, e registrá-la em `app/`, na lista de políticas entregue ao `ControleQuotas`. O `SolicitarReservaUseCase` só chama `avaliarPoliticas(pedido)` e continua igual.
 
 As portas falam a língua do domínio. O `Provisionador` recebe pedidos como "liberar o acesso da reserva X" e "revogar o acesso da reserva X", sem nenhum comando ou conceito do Slurm. Se a porta expusesse detalhes de um provisionador específico, trocar de provisionador deixaria de ser só a troca de um adaptador (ADR-002).
 
@@ -112,22 +116,22 @@ O sistema conversa com três sistemas externos, e cada um fica atrás de uma por
 
 - Autenticação institucional (LDAP/SSO), atrás de `ServicoAutenticacao`. No protótipo, `ServicoAutenticacaoFake` devolve um usuário fixo.
 - Provisionador de recursos (Slurm, OpenStack ou Proxmox; ainda não definido), atrás de `Provisionador`. No protótipo, `SlurmProvisionador` é um stub que só registra o comando que seria executado, e os testes usam `ProvisionadorFake`.
-- Serviço de e-mail, atrás de `Notificador`. `EmailNotificador` envia por SMTP, e para rodar localmente pode apontar para o Mailpit, que captura as mensagens sem enviá-las de verdade. Os testes usam `NotificadorFake`.
+- Serviço de e-mail, atrás de `Notificador`. Na versão real, `EmailNotificador` envia por SMTP (e, para rodar localmente, pode apontar para o Mailpit, que captura as mensagens sem enviá-las). No protótipo ele é simulado: só registra a mensagem que seria enviada. A composição do protótipo e os testes usam `NotificadorFake`.
 
 Nenhuma dessas integrações é chamada diretamente por um caso de uso ou por uma entidade. O domínio não sabe que elas existem.
 
 ## Dependência externa
 
-As duas integrações substituíveis implementadas no protótipo são estas:
+As duas integrações substituíveis previstas no design são estas. A exercida na fatia do protótipo é o `Notificador`:
 
 ```
-Notificador (porta do módulo notificacoes)
-|-- EmailNotificador     SMTP real ou Mailpit local
-`-- NotificadorFake      guarda as mensagens em memória, usado nos testes
+Notificador (porta do módulo notificacoes)          -- exercida no protótipo
+|-- EmailNotificador     simulado no protótipo (SMTP real ou Mailpit na versão real)
+`-- NotificadorFake      guarda as mensagens em memória; usado na composição e nos testes
 
-Provisionador (porta definida pelo núcleo, em reservas/aplicacao)
+Provisionador (porta definida pelo núcleo, em reservas/aplicacao)  -- fora da fatia
 |-- SlurmProvisionador   stub que registra o comando que seria executado
-`-- ProvisionadorFake    registra as chamadas em memória, usado nos testes
+`-- ProvisionadorFake    registra as chamadas em memória
 ```
 
 Em termos de interface, cada porta é pequena e fala a língua do domínio: o `Notificador` sabe enviar um aviso a um `Usuario`, e o `Provisionador` sabe liberar e revogar o acesso de uma reserva. Nenhuma delas expõe SMTP ou comandos do Slurm.
@@ -140,14 +144,16 @@ Na modificabilidade, trocar e-mail por Telegram ou Slurm por OpenStack é escrev
 
 ## Documentação da API
 
-A API cobre o caso de uso principal e as consultas do protótipo:
+A API projetada é a seguinte. As rotas marcadas com * estão fora da fatia do protótipo e ainda não foram implementadas.
 
 | Método e rota | O que faz | Respostas |
 |---|---|---|
-| `POST /reservas` | Solicita uma reserva (recurso, quantidade, início, fim, projeto) | 201 com a reserva APROVADA ou PENDENTE; 400 período inválido; 403 pedido negado por política; 409 recurso indisponível; 422 quota excedida |
-| `GET /reservas` | Lista as reservas do usuário autenticado | 200 |
-| `GET /recursos/{id}/agenda?inicio=&fim=` | Mostra a ocupação e a capacidade livre de um recurso no período | 200; 404 recurso inexistente |
-| `POST /reservas/{id}/aprovacao` | O responsável aprova ou rejeita uma reserva pendente | 200; 403 usuário não é responsável pelo projeto; 409 reserva não está pendente |
-| `DELETE /reservas/{id}` | Cancela uma reserva pendente, aprovada ou ativa, devolvendo capacidade e quota | 204; 409 reserva já encerrada, cancelada ou rejeitada |
+| `POST /reservas` | Solicita uma reserva (recurso, quantidade, início, fim, projeto) | 201 com a reserva APROVADA ou PENDENTE; 400 período ou quantidade inválidos; 401 credencial inválida; 403 pedido negado por política; 404 recurso ou projeto inexistente; 409 recurso indisponível; 422 quota excedida |
+| `GET /reservas` | Lista as reservas do usuário autenticado | 200; 401 credencial inválida |
+| `GET /recursos/{id}/agenda?inicio=&fim=` | Mostra a ocupação e a capacidade livre de um recurso no período | 200; 400 período inválido; 404 recurso inexistente |
+| `POST /reservas/{id}/aprovacao` * | O responsável aprova ou rejeita uma reserva pendente | 200; 403 usuário não é responsável pelo projeto; 409 reserva não está pendente |
+| `DELETE /reservas/{id}` * | Cancela uma reserva pendente, aprovada ou ativa, devolvendo capacidade e quota | 204; 409 reserva já encerrada, cancelada ou rejeitada |
 
-A diferença entre 409 e 422 é intencional: 409 significa que o recurso não tem capacidade no período, e outro horário pode funcionar; 422 significa que o projeto não tem quota, e trocar o horário não resolve. A especificação completa, com os formatos de requisição e resposta, será publicada em OpenAPI junto com o código.
+No protótipo, o usuário é identificado pelo cabeçalho `x-usuario-id`, entregue ao `ServicoAutenticacaoFake`; sem o cabeçalho, vale o usuário fixo.
+
+A diferença entre 409 e 422 é intencional: 409 significa que o recurso não tem capacidade no período, e outro horário pode funcionar; 422 significa que o projeto não tem quota, e trocar o horário não resolve. A especificação completa, com os formatos de requisição e resposta, está em OpenAPI em [`api.yaml`](api.yaml).

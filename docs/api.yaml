@@ -5,7 +5,8 @@ info:
   description: >
     API REST para gerenciamento de solicitações de recursos computacionais
     (servidores, GPUs e armazenamento) considerando disponibilidade, quotas e
-    políticas de autorização.
+    políticas de autorização. As operações marcadas com `x-implementado: false`
+    fazem parte do design, mas estão fora da fatia vertical do protótipo.
 paths:
   /reservas:
     post:
@@ -52,6 +53,8 @@ paths:
           description: Reserva criada nos estados APROVADA ou PENDENTE
         "400":
           description: Período inválido (início >= fim) ou quantidade inválida
+        "401":
+          description: Credencial inválida (usuário desconhecido)
         "403":
           description: Pedido negado por política de autorização
         "404":
@@ -71,6 +74,8 @@ paths:
       responses:
         "200":
           description: Lista de reservas do usuário
+        "401":
+          description: Credencial inválida (usuário desconhecido)
   /recursos/{id}/agenda:
     get:
       summary: Consulta a ocupação e a capacidade livre de um recurso no período
@@ -101,7 +106,8 @@ paths:
           description: Recurso inexistente
   /reservas/{id}/aprovacao:
     post:
-      summary: O responsável pelo projeto aprova ou rejeita uma reserva pendente
+      summary: "[Não implementado no protótipo] O responsável pelo projeto aprova ou rejeita uma reserva pendente"
+      x-implementado: false
       parameters:
         - in: path
           name: id
@@ -117,7 +123,8 @@ paths:
           description: Reserva não está pendente
   /reservas/{id}:
     delete:
-      summary: Cancela uma reserva pendente, aprovada ou ativa, devolvendo capacidade e quota
+      summary: "[Não implementado no protótipo] Cancela uma reserva pendente, aprovada ou ativa, devolvendo capacidade e quota"
+      x-implementado: false
       parameters:
         - in: path
           name: id

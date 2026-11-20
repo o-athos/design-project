@@ -31,6 +31,7 @@ import { PAGINA_WEB_HTML } from "./web.ts";
 export interface OpcoesServidor {
   caminhoBanco?: string;
   politicas?: Iterable<PoliticaAutorizacao> | null;
+  modoDemonstracao?: boolean;
 }
 
 export function criarDependenciasIniciais({
@@ -243,12 +244,17 @@ export function construirServidor(opcoes: OpcoesServidor = {}): FastifyInstance 
     }));
   });
 
-  app.post("/reset", async () => {
-    db.exec(`DELETE FROM reservas; DELETE FROM quotas_consumos;`);
-    notificador.mensagens.length = 0;
-    barramento.historicoEntregues.length = 0;
-    return { ok: true };
-  });
+  // Rotas de apoio à demonstração (/projetos, /quotas, /notificacoes, /reset):
+  // não fazem parte da API do sistema. O /reset apaga os dados e só existe
+  // com o modo de demonstração ligado (o servidor do npm start liga; DEMO=0 desliga).
+  if (opcoes.modoDemonstracao) {
+    app.post("/reset", async () => {
+      db.exec(`DELETE FROM reservas; DELETE FROM quotas_consumos;`);
+      notificador.mensagens.length = 0;
+      barramento.historicoEntregues.length = 0;
+      return { ok: true };
+    });
+  }
 
   registrarRotasReservas(app, {
     autenticacao,
@@ -266,7 +272,9 @@ const isMain =
 
 if (isMain) {
   const portaInicial = Number(process.env.PORT ?? 3333);
-  const app = construirServidor();
+  const app = construirServidor({
+    modoDemonstracao: process.env.DEMO !== "0",
+  });
   const iniciar = async (porta: number) => {
     try {
       const address = await app.listen({ port: porta, host: "0.0.0.0" });

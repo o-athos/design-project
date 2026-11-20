@@ -112,11 +112,8 @@ export function registrarRotasReservas(
 
   app.get("/reservas", async (request, reply) => {
     try {
-      const query = (request.query ?? {}) as Record<string, unknown>;
       const credencial =
-        (query.usuario as string | undefined) ??
-        (request.headers["x-usuario-id"] as string | undefined) ??
-        null;
+        (request.headers["x-usuario-id"] as string | undefined) ?? null;
       const usuario = autenticacao.autenticar(credencial);
       return repositorio.listarPorUsuario(usuario.id).map(serializarReserva);
     } catch (err) {

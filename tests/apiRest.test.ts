@@ -65,7 +65,7 @@ describe("Integração HTTP — Controlador REST (POST /reservas, GET /reservas,
     const app = construirServidor({
       politicas: [
         new PoliticaLimiteGpuDuracao(),
-        new PoliticaGpuApenasDoutorandos(),
+        new PoliticaGpuApenasDoutorandos(["gpu-a100"]),
       ],
     });
 
