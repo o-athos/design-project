@@ -683,11 +683,11 @@ export const PAGINA_WEB_HTML = `<!DOCTYPE html>
             </div>
             <div class="field">
               <label>Início da reserva</label>
-              <input type="datetime-local" id="inicio" value="2026-11-20T08:00" onclick="this.showPicker && this.showPicker()" onchange="atualizarPainel()" />
+              <input type="datetime-local" id="inicio" value="2026-11-20T08:00" onclick="this.showPicker && this.showPicker()" oninput="atualizarPainel()" onchange="atualizarPainel()" />
             </div>
             <div class="field">
               <label>Fim da reserva</label>
-              <input type="datetime-local" id="fim" value="2026-11-20T18:00" onclick="this.showPicker && this.showPicker()" onchange="atualizarPainel()" />
+              <input type="datetime-local" id="fim" value="2026-11-20T18:00" onclick="this.showPicker && this.showPicker()" oninput="atualizarPainel()" onchange="atualizarPainel()" />
             </div>
             <button class="btn-primary" onclick="enviarReserva()">Reservar</button>
           </section>
@@ -871,10 +871,10 @@ export const PAGINA_WEB_HTML = `<!DOCTYPE html>
       return \`\${String(d.getUTCDate()).padStart(2,'0')}/\${String(d.getUTCMonth()+1).padStart(2,'0')} \${String(d.getUTCHours()).padStart(2,'0')}:\${String(d.getUTCMinutes()).padStart(2,'0')}\`;
     }
 
-    function calcularUsado(q, referenciaIso) {
+    function calcularUsado(q, inicioIso, fimIso) {
       const c = q.consumosRegistrados || [];
       if (q.modo === "ACUMULADA_MENSAL") {
-        const ref = new Date(referenciaIso);
+        const ref = new Date(inicioIso);
         const ano = ref.getUTCFullYear();
         const mes = ref.getUTCMonth();
         return c.reduce((total, x) => {
@@ -886,10 +886,21 @@ export const PAGINA_WEB_HTML = `<!DOCTYPE html>
           return total + x.quantidade * horas;
         }, 0);
       }
+      const tIni = new Date(inicioIso).getTime();
+      const tFimBruto = new Date(fimIso || inicioIso).getTime();
+      const tFim = tFimBruto > tIni ? tFimBruto : tIni + 1;
+      const sobrepostos = c.filter(x => new Date(x.inicio).getTime() < tFim && tIni < new Date(x.fim).getTime());
+      if (sobrepostos.length === 0) return 0;
+      const pontos = new Set([tIni]);
+      for (const x of sobrepostos) {
+        const tx = new Date(x.inicio).getTime();
+        if (tx >= tIni && tx < tFim) pontos.add(tx);
+      }
       let p = 0;
-      for (const x of c) {
-        const t = new Date(x.inicio).getTime();
-        const s = c.filter(y => new Date(y.inicio).getTime() <= t && t < new Date(y.fim).getTime()).reduce((a, y) => a + y.quantidade, 0);
+      for (const instante of pontos) {
+        const s = sobrepostos
+          .filter(y => new Date(y.inicio).getTime() <= instante && instante < new Date(y.fim).getTime())
+          .reduce((a, y) => a + y.quantidade, 0);
         if (s > p) p = s;
       }
       return p;
@@ -958,7 +969,7 @@ export const PAGINA_WEB_HTML = `<!DOCTYPE html>
       const proj = projetos[0];
       if (proj) {
         document.getElementById("painelQuotas").innerHTML = Object.entries(proj.quotas).map(([tipo, q], i) => {
-          const usado = Number(calcularUsado(q, ini).toFixed(1));
+          const usado = Number(calcularUsado(q, ini, fim).toFixed(1));
           const pct = Math.min(100, Math.round((usado / q.limite) * 100));
           const un = q.modo === "ACUMULADA_MENSAL" ? "h" : "TB";
           const ref = new Date(ini);
